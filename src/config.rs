@@ -63,6 +63,8 @@ pub struct Config {
     pub pico_strap_name: String,
     pub check_updates: bool,
     pub skipped_update: String,
+    pub steamvr_autostart: bool,
+    pub steamvr_registered: bool,
 }
 
 impl Default for Config {
@@ -81,6 +83,8 @@ impl Default for Config {
             pico_strap_name: String::new(),
             check_updates: true,
             skipped_update: String::new(),
+            steamvr_autostart: false,
+            steamvr_registered: false,
         }
     }
 }
