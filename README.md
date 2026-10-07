@@ -1,0 +1,125 @@
+# hr-osc-rust
+
+Sends your heart rate to VRChat over OSC. It reads a Bluetooth chest strap or
+watch directly, a Raspberry Pi Pico W plugged in over USB, HTTP posts from
+another app, or a Pulsoid widget.
+
+The window and settings follow [hr-osc](https://github.com/kamyu1537/hr-osc) by
+kamyu. The OSC parameters have the same names, and avatars built for hr-osc
+work unchanged. This is a separate program written from scratch in Rust. It
+replaces my two bridges, hr-bridge-ble and hr-bridge-pico: both jobs now happen
+inside the app.
+
+## Install
+
+Download the archive for your system from
+[Releases](https://github.com/RealWhyKnot/hr-osc-rust/releases), unpack it
+anywhere and run `hr-osc-rust.exe` (or `hr-osc-rust` on Linux and macOS).
+There's no installer and nothing else to set up.
+
+The app checks GitHub for a newer release when it starts and offers to update
+itself. Untick "Check for updates" under Settings > General to turn that off.
+
+If hr-osc has been used on this computer, its settings are copied over the first
+time hr-osc-rust starts. Close hr-osc first: both want port 8080 in HTTP mode.
+
+## Heart rate sources
+
+Pick one under Settings > General > Service Type.
+
+| Service | Reads from |
+|---|---|
+| Auto | The Pico if one is plugged in, otherwise the computer's Bluetooth. This is the default. |
+| Bluetooth | Any strap or watch broadcasting the standard heart rate service (`0x180D`). |
+| Pico (USB) | A Pico W or Pico 2 W running the firmware in `firmware/`. |
+| HTTP | A POST holding a bare number, sent to port 8080. |
+| Pulsoid / Stromno | A Pulsoid widget ID. |
+
+The Home tab shows the reading and, under the connection status, which device it
+came from.
+
+### Bluetooth
+
+Settings > Bluetooth lists every heart rate device in range. Leave it on "Any
+heart rate device" to take the strongest one, or click a device to stick to it.
+Watches only show up when they broadcast heart rate over Bluetooth. Most chest
+straps do it whenever they touch skin.
+
+A strap takes one connection at a time. If it's already connected to a phone or
+a Pico, the computer won't see it.
+
+### Pico bridge
+
+For computers without Bluetooth, a Raspberry Pi Pico W does the Bluetooth work
+and sends readings over its USB cable.
+
+1. Hold BOOTSEL while you plug the board in. It shows up as a drive called
+   `RPI-RP2`. Drop the MicroPython `.uf2` for your board on it:
+   [Pico 2 W](https://micropython.org/download/RPI_PICO2_W/) or
+   [Pico W](https://micropython.org/download/RPI_PICO_W/).
+2. Open Settings > Pico in hr-osc-rust and click Install Firmware. Put part of
+   the strap's name in Strap Name first if there's more than one strap nearby.
+3. Put the strap on. The board's LED lights up once it's connected.
+
+You can also copy the firmware by hand with
+`mpremote connect auto fs cp firmware/main.py :main.py`.
+
+On Linux your account needs access to the serial port. On most distributions
+that's the `dialout` group: `sudo usermod -a -G dialout $USER`, then log out and
+back in.
+
+### HTTP
+
+```bash
+curl -X POST -d '60' http://localhost:8080
+```
+
+The server listens on every network interface. A phone app on the same network
+can post to your computer's address.
+
+## VRChat parameters
+
+| Parameter | Type | Value |
+|---|---|---|
+| `hr_connected` | Bool | True while readings arrive. False after Connected Timeout seconds without one. |
+| `hr_percent` | Float | Heart rate divided by Max Heart Rate, from 0 to 1. |
+
+Both paths can be changed under Settings > Parameters. The OSC target is
+`127.0.0.1:9000` by default.
+
+## Start at login
+
+Tick "Start at login" under Settings > General. The app then starts minimized
+when you sign in. On Windows that's an entry under
+`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. If you move the program
+folder, open it once from the new place and the entry follows.
+
+## Files
+
+Settings and the log live in `%APPDATA%\hr-osc-rust` on Windows,
+`~/.config/hr-osc-rust` on Linux and `~/Library/Application Support/hr-osc-rust`
+on macOS.
+
+## Building
+
+```bash
+cargo build --release
+```
+
+Linux needs `pkg-config libudev-dev libdbus-1-dev libssl-dev libfontconfig1-dev libxkbcommon-dev`.
+
+Checks run on every push:
+
+```bash
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+cargo test
+```
+
+Releases are tagged `vYYYY.M.D.N`. Pushing a tag builds Windows, Linux and macOS
+archives and publishes them. A nightly job tags a `-beta` when main has a new
+feature or fix since the last tag, and beta builds update to newer betas.
+
+## License
+
+GPL-3.0. The font and icon licences are in [NOTICE.md](NOTICE.md).
