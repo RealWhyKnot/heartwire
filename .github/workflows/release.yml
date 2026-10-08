@@ -65,29 +65,29 @@ jobs:
             rid: win-x64
             target: x86_64-pc-windows-msvc
             ext: zip
-            exe: hr-osc-rust.exe
+            exe: heartwire.exe
             test: true
           - os: ubuntu-latest
             rid: linux-x64
             target: x86_64-unknown-linux-gnu
             ext: tar.gz
-            exe: hr-osc-rust
+            exe: heartwire
             test: true
           - os: macos-latest
             rid: osx-arm64
             target: aarch64-apple-darwin
             ext: tar.gz
-            exe: hr-osc-rust
+            exe: heartwire
             test: true
           - os: macos-latest
             rid: osx-x64
             target: x86_64-apple-darwin
             ext: tar.gz
-            exe: hr-osc-rust
+            exe: heartwire
             test: false
     env:
-      HR_OSC_VERSION: ${{ needs.validate.outputs.version }}
-      HR_OSC_CHANNEL: ${{ needs.validate.outputs.channel }}
+      HEARTWIRE_VERSION: ${{ needs.validate.outputs.version }}
+      HEARTWIRE_CHANNEL: ${{ needs.validate.outputs.channel }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -126,8 +126,8 @@ jobs:
       - name: Package
         shell: pwsh
         run: |
-          $version = $env:HR_OSC_VERSION
-          $name = "hr-osc-rust-$version-${{ matrix.rid }}"
+          $version = $env:HEARTWIRE_VERSION
+          $name = "heartwire-$version-${{ matrix.rid }}"
           $stage = Join-Path 'dist' $name
           New-Item -ItemType Directory -Force (Join-Path $stage 'firmware') | Out-Null
           Copy-Item "target/${{ matrix.target }}/release/${{ matrix.exe }}" $stage
@@ -168,7 +168,7 @@ jobs:
           ref: ${{ needs.validate.outputs.tag }}
 
       - name: Download builds
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           pattern: release-*
           merge-multiple: true
@@ -188,13 +188,13 @@ jobs:
         uses: RealWhyKnot/workflows/release-notes@v1
         with:
           tag: ${{ needs.validate.outputs.tag }}
-          title: hr-osc-rust ${{ needs.validate.outputs.tag }}
+          title: Heartwire ${{ needs.validate.outputs.tag }}
           extra: |
             ## Downloads
 
-            - Windows: `hr-osc-rust-${{ needs.validate.outputs.version }}-win-x64.zip`
-            - Linux: `hr-osc-rust-${{ needs.validate.outputs.version }}-linux-x64.tar.gz`
-            - macOS: `hr-osc-rust-${{ needs.validate.outputs.version }}-osx-arm64.tar.gz` (Apple silicon) or `-osx-x64.tar.gz` (Intel)
+            - Windows: `heartwire-${{ needs.validate.outputs.version }}-win-x64.zip`
+            - Linux: `heartwire-${{ needs.validate.outputs.version }}-linux-x64.tar.gz`
+            - macOS: `heartwire-${{ needs.validate.outputs.version }}-osx-arm64.tar.gz` (Apple silicon) or `-osx-x64.tar.gz` (Intel)
 
             Each archive has a matching `.integrity.tsv` with the hash of the archive and every file in it.
 
@@ -204,7 +204,7 @@ jobs:
         uses: RealWhyKnot/workflows/publish-release@v1
         with:
           tag: ${{ needs.validate.outputs.tag }}
-          title: hr-osc-rust ${{ needs.validate.outputs.tag }}
+          title: Heartwire ${{ needs.validate.outputs.tag }}
           notes-file: ${{ steps.notes.outputs.file }}
           prerelease: ${{ needs.validate.outputs.prerelease }}
           draft-first: 'true'
