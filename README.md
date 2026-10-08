@@ -1,14 +1,15 @@
 # Heartwire
 
+Heavily inspired by [hr-osc](https://github.com/kamyu1537/hr-osc) by kamyu.
+
 Sends your heart rate to VRChat over OSC. It reads a Bluetooth chest strap or
 watch directly, a Raspberry Pi Pico W plugged in over USB, HTTP posts from
 another app, or a Pulsoid widget.
 
-The window and settings follow [hr-osc](https://github.com/kamyu1537/hr-osc) by
-kamyu. The OSC parameters have the same names, and avatars built for hr-osc
-work unchanged. This is a separate program written from scratch in Rust. It
-replaces my two bridges, hr-bridge-ble and hr-bridge-pico: both jobs now happen
-inside the app.
+The window and settings look like hr-osc's, and the OSC parameters have the
+same names. Avatars built for hr-osc work unchanged. Heartwire is a separate
+program written from scratch. It replaces my two bridges, hr-bridge-ble and
+hr-bridge-pico: both jobs now happen inside the app.
 
 ## Install
 
