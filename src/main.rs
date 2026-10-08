@@ -14,6 +14,7 @@ mod steamvr;
 mod ui_tests;
 mod update;
 mod version;
+#[cfg(any(windows, test))]
 mod vr_panel;
 
 use std::fs::File;
