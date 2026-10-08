@@ -8,6 +8,7 @@ use std::time::Duration;
 use crate::config::{Config, Service};
 use crate::engine::Event;
 
+mod auto;
 pub mod ble;
 pub mod http;
 pub mod pico;
@@ -158,7 +159,7 @@ pub fn spawn(config: &Config, generation: u64, tx: Sender<Event>) -> Handle {
         .name(format!("source-{}", service.key()))
         .stack_size(256 * 1024)
         .spawn(move || match service {
-            Service::Auto => auto(&ctx, &device),
+            Service::Auto => auto::run(&ctx, &device),
             Service::Bluetooth => {
                 if ble::run(&ctx, &device, &mut || false) == ble::Outcome::NoAdapter {
                     ctx.status("No Bluetooth adapter found");
@@ -170,27 +171,4 @@ pub fn spawn(config: &Config, generation: u64, tx: Sender<Event>) -> Handle {
         })
         .ok();
     Handle { stopper, thread }
-}
-
-fn auto(ctx: &Context, device: &str) {
-    let mut bluetooth_retry = std::time::Instant::now();
-    while !ctx.stopped() {
-        if let Some(port) = pico::find_port() {
-            pico::session(ctx, &port);
-            continue;
-        }
-        if std::time::Instant::now() >= bluetooth_retry {
-            let mut ticks = 0u32;
-            let outcome = ble::run(ctx, device, &mut || {
-                ticks += 1;
-                ticks.is_multiple_of(5) && pico::find_port().is_some()
-            });
-            if outcome == ble::Outcome::NoAdapter {
-                bluetooth_retry = std::time::Instant::now() + Duration::from_secs(60);
-            }
-            continue;
-        }
-        ctx.status("Waiting for a Pico or a Bluetooth adapter");
-        ctx.sleep(Duration::from_secs(3));
-    }
 }

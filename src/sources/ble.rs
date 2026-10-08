@@ -8,7 +8,7 @@ use futures::StreamExt;
 use uuid::Uuid;
 
 use super::{Context, Device};
-use crate::hr;
+use crate::heart_rate;
 
 const HR_SERVICE: Uuid = uuid_from_u16(0x180D);
 const HR_MEASUREMENT: Uuid = uuid_from_u16(0x2A37);
@@ -175,8 +175,8 @@ async fn stream(ctx: &Context, adapter: &Adapter, peripheral: Peripheral, label:
             note = notes.next() => match note {
                 Some(note) if note.uuid == HR_MEASUREMENT => {
                     last = Instant::now();
-                    let Some(m) = hr::parse_measurement(&note.value) else { continue };
-                    match hr::usable(m) {
+                    let Some(m) = heart_rate::parse_measurement(&note.value) else { continue };
+                    match heart_rate::usable(m) {
                         Some(bpm) => {
                             if no_contact {
                                 ctx.status(format!("Bluetooth: {label}"));

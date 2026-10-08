@@ -1,0 +1,99 @@
+import { Updates } from "../state.slint";
+import { Theme } from "../theme.slint";
+
+component UpdateButton inherits Rectangle {
+    in property <string> text;
+    in property <color> idle;
+    in property <color> hover;
+    callback clicked();
+    border-radius: 8px;
+    background: touch.has-hover ? root.hover : root.idle;
+    label := Text {
+        text: root.text;
+        color: white;
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+export component UpdatePage inherits Rectangle {
+    Rectangle {
+        width: 220px;
+        height: 150px;
+        title := Text {
+            y: 0;
+            height: 32px;
+            font-size: 24px;
+            font-weight: 700;
+            text: "Update available!";
+            color: white;
+        }
+        current := Text {
+            y: 44px;
+            height: 20px;
+            font-size: 14px;
+            text: "Current version: " + Updates.current-version;
+            color: Theme.rose-500;
+        }
+        next := Text {
+            y: 64px;
+            height: 20px;
+            font-size: 14px;
+            text: "New version: " + Updates.version;
+            color: Theme.lime-500;
+        }
+        if !Updates.busy: Rectangle {
+            y: 100px;
+            height: 36px;
+            UpdateButton {
+                x: 0;
+                width: parent.width - 4px - 72px;
+                text: "Update";
+                idle: Theme.update-button;
+                hover: Theme.update-button-hover;
+                clicked => {
+                    Updates.update-now();
+                }
+            }
+            UpdateButton {
+                x: parent.width - 72px;
+                width: 72px;
+                text: "Later";
+                idle: Theme.later-button;
+                hover: Theme.later-button-hover;
+                clicked => {
+                    Updates.update-later();
+                }
+            }
+        }
+        if !Updates.busy && Updates.state == "": Rectangle {
+            y: 140px;
+            height: 16px;
+            skip := Text {
+                font-size: 12px;
+                text: "Skip this version";
+                color: skip-touch.has-hover ? Theme.gray-400 : Theme.gray-500;
+            }
+            skip-touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => {
+                    Updates.update-skip();
+                }
+            }
+        }
+        if Updates.state != "": state := Text {
+            y: Updates.busy ? 104px : 140px;
+            width: parent.width;
+            height: 16px;
+            font-size: 12px;
+            horizontal-alignment: center;
+            text: Updates.state;
+            color: Theme.gray-400;
+            overflow: elide;
+        }
+    }
+}

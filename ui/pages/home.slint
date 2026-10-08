@@ -1,0 +1,87 @@
+import { Theme } from "../theme.slint";
+import { HeartRate } from "../state.slint";
+import { Heart } from "../widgets/heart.slint";
+
+export component Home inherits Rectangle {
+    in property <bool> animate: true;
+    property <length> heart-top: 21px;
+    in-out property <float> phase: 0;
+    property <bool> pinging: HeartRate.connected && root.visible && root.animate;
+    property <float> t: root.pinging ? root.phase : 1;
+    Timer {
+        interval: 33ms;
+        running: root.pinging;
+        triggered => {
+            root.phase = mod(root.phase + 0.033, 1);
+        }
+    }
+    property <float> p: min(1, root.t / 0.75);
+    property <float> eased: 1 - pow(1 - root.p, 3);
+    if HeartRate.connected: Heart {
+        width: 56px * (1 + root.eased);
+        height: self.width;
+        x: (root.width - self.width) / 2;
+        y: root.heart-top + 28px - self.height / 2;
+        fill: Theme.red-400;
+        opacity: 0.7 * (1 - root.eased);
+    }
+    heart := Heart {
+        x: (root.width - 56px) / 2;
+        y: root.heart-top;
+        width: 56px;
+        height: 56px;
+        fill: HeartRate.connected ? Theme.red-400 : Theme.gray-500;
+    }
+    bpm-label := Text {
+        y: root.heart-top + 56px + 11px;
+        width: root.width;
+        height: 28px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        font-size: 20px;
+        text: HeartRate.bpm + " bpm";
+        color: HeartRate.connected ? Theme.red-400 : Theme.gray-500;
+    }
+    percent-label := Text {
+        y: root.heart-top + 56px + 11px + 28px;
+        width: root.width;
+        height: 20px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        font-size: 14px;
+        text: "(" + HeartRate.percent-text + ")";
+        color: Theme.gray-600;
+    }
+    status-title := Text {
+        y: 157px;
+        width: root.width;
+        height: 20px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        font-size: 14px;
+        text: "Connection Status";
+        color: white;
+    }
+    status-value := Text {
+        y: 177px;
+        width: root.width;
+        height: 16px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        font-size: 12px;
+        text: HeartRate.connected ? "Connected" : "Disconnected";
+        color: HeartRate.connected ? Theme.lime-500 : Theme.gray-600;
+    }
+    source-label := Text {
+        y: 193px;
+        x: 8px;
+        width: root.width - 16px;
+        height: 16px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        font-size: 12px;
+        text: HeartRate.status;
+        color: Theme.gray-500;
+        overflow: elide;
+    }
+}

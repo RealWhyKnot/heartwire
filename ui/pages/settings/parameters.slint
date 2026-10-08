@@ -1,0 +1,39 @@
+import { Settings } from "../../state.slint";
+import { Field } from "../../widgets/field.slint";
+import { GroupGap } from "../../widgets/group-gap.slint";
+import { Label } from "../../widgets/label.slint";
+
+export component ParametersTab inherits VerticalLayout {
+    spacing: 8px;
+    Label {
+        text: "Connected Parameter Path:";
+    }
+    Field {
+        text <=> Settings.path-connected;
+        edited(value) => {
+            Settings.setting("osc_path_connected", value);
+        }
+    }
+    GroupGap { }
+    Label {
+        text: "HR Percent Parameter Path:";
+    }
+    Field {
+        text <=> Settings.path-percent;
+        edited(value) => {
+            Settings.setting("osc_path_percent", value);
+        }
+    }
+    GroupGap { }
+    Label {
+        text: "Max Heart Rate:";
+    }
+    Field {
+        number: true;
+        text <=> Settings.max-heart-rate;
+        placeholder: "(default: 200)";
+        edited(value) => {
+            Settings.setting("max_heart_rate", value);
+        }
+    }
+}

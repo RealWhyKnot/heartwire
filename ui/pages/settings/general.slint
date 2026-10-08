@@ -1,0 +1,54 @@
+import { Settings } from "../../state.slint";
+import { Check } from "../../widgets/check.slint";
+import { Field } from "../../widgets/field.slint";
+import { GroupGap } from "../../widgets/group-gap.slint";
+import { Label } from "../../widgets/label.slint";
+import { Select } from "../../widgets/select.slint";
+
+export component GeneralTab inherits VerticalLayout {
+    spacing: 8px;
+    Label {
+        text: "Service Type:";
+    }
+    Select {
+        options: Settings.services;
+        current <=> Settings.service;
+        picked(index) => {
+            Settings.service-picked(index);
+        }
+    }
+    GroupGap { }
+    Label {
+        text: "Connected Timeout:";
+    }
+    Field {
+        number: true;
+        text <=> Settings.connected-timeout;
+        placeholder: "10";
+        edited(value) => {
+            Settings.setting("connected_timeout", value);
+        }
+    }
+    GroupGap { }
+    Check {
+        text: "Start at login";
+        checked <=> Settings.autostart;
+        toggled(on) => {
+            Settings.autostart-toggled(on);
+        }
+    }
+    if Settings.steamvr-supported: Check {
+        text: "Start with SteamVR";
+        checked <=> Settings.steamvr;
+        toggled(on) => {
+            Settings.steamvr-toggled(on);
+        }
+    }
+    Check {
+        text: "Check for updates";
+        checked <=> Settings.check-updates;
+        toggled(on) => {
+            Settings.updates-toggled(on);
+        }
+    }
+}

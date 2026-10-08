@@ -21,30 +21,6 @@ pub fn usable(m: Measurement) -> Option<u16> {
     (m.contact != Some(false) && (1..=MAX_BPM).contains(&m.bpm)).then_some(m.bpm)
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub enum PicoLine<'a> {
-    Reading(u16),
-    Note(&'a str),
-    Other,
-}
-
-pub fn parse_pico_line(raw: &[u8]) -> PicoLine<'_> {
-    let Ok(text) = std::str::from_utf8(raw) else {
-        return PicoLine::Other;
-    };
-    let text = text.trim();
-    if let Some(note) = text.strip_prefix('#') {
-        return PicoLine::Note(note.trim());
-    }
-    if text.is_empty() || !text.bytes().all(|b| b.is_ascii_digit()) {
-        return PicoLine::Other;
-    }
-    match text.parse::<u16>() {
-        Ok(bpm) if (1..=MAX_BPM).contains(&bpm) => PicoLine::Reading(bpm),
-        _ => PicoLine::Other,
-    }
-}
-
 pub fn parse_bpm_text(text: &str) -> Option<u16> {
     let text = text.trim();
     let value: f64 = text.parse().ok()?;
@@ -103,21 +79,6 @@ mod tests {
     #[test]
     fn zero_is_not_a_reading() {
         assert_eq!(usable(parse_measurement(&[0x00, 0]).unwrap()), None);
-    }
-
-    #[test]
-    fn pico_lines() {
-        assert_eq!(parse_pico_line(b"72\r\n"), PicoLine::Reading(72));
-        assert_eq!(
-            parse_pico_line(b"# found COOSPO\r\n"),
-            PicoLine::Note("found COOSPO")
-        );
-        assert_eq!(parse_pico_line(b"0\n"), PicoLine::Other);
-        assert_eq!(parse_pico_line(b"301\n"), PicoLine::Other);
-        assert_eq!(parse_pico_line(b"-5\n"), PicoLine::Other);
-        assert_eq!(parse_pico_line(b">>> \n"), PicoLine::Other);
-        assert_eq!(parse_pico_line(b"\xff\xfe\n"), PicoLine::Other);
-        assert_eq!(parse_pico_line(b"\n"), PicoLine::Other);
     }
 
     #[test]

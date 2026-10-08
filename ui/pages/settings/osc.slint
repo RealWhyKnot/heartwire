@@ -1,0 +1,30 @@
+import { Settings } from "../../state.slint";
+import { Field } from "../../widgets/field.slint";
+import { GroupGap } from "../../widgets/group-gap.slint";
+import { Label } from "../../widgets/label.slint";
+
+export component OscTab inherits VerticalLayout {
+    spacing: 8px;
+    Label {
+        text: "OSC Host:";
+    }
+    Field {
+        text <=> Settings.osc-host;
+        placeholder: "127.0.0.1";
+        edited(value) => {
+            Settings.setting("osc_client_host", value);
+        }
+    }
+    GroupGap { }
+    Label {
+        text: "OSC Port:";
+    }
+    Field {
+        number: true;
+        text <=> Settings.osc-port;
+        placeholder: "9000";
+        edited(value) => {
+            Settings.setting("osc_client_port", value);
+        }
+    }
+}

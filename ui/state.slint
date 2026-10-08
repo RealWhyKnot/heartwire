@@ -1,0 +1,63 @@
+export struct DeviceRow {
+    name: string,
+    address: string,
+    selected: bool,
+}
+
+export global Navigation {
+    in-out property <int> page: 0;
+    in-out property <string> tab: "general";
+    callback open-link(string);
+}
+
+export global HeartRate {
+    in property <bool> connected;
+    in property <int> bpm;
+    in property <string> percent-text: "0.00";
+    in property <string> status;
+    in property <[DeviceRow]> devices;
+    in property <string> notice;
+}
+
+export global Settings {
+    in property <[string]> services;
+    in-out property <int> service;
+    in-out property <string> connected-timeout;
+    in-out property <bool> autostart;
+    in-out property <bool> check-updates;
+    in-out property <bool> steamvr;
+    in property <bool> steamvr-supported;
+    in-out property <string> http-port;
+    in-out property <string> widget-id;
+    in-out property <string> osc-host;
+    in-out property <string> osc-port;
+    in-out property <string> path-connected;
+    in-out property <string> path-percent;
+    in-out property <string> max-heart-rate;
+    in-out property <string> pico-strap;
+
+    out property <bool> uses-bluetooth: self.service == 0 || self.service == 1;
+    out property <bool> uses-pico: self.service == 0 || self.service == 2;
+    out property <bool> uses-http: self.service == 3;
+    out property <bool> uses-pulsoid: self.service == 4;
+
+    callback setting(string, string);
+    callback service-picked(int);
+    callback device-picked(string);
+    callback autostart-toggled(bool);
+    callback steamvr-toggled(bool);
+    callback updates-toggled(bool);
+    callback restart-source();
+    callback install-firmware();
+}
+
+export global Updates {
+    in property <string> current-version;
+    in property <string> version;
+    in property <string> state;
+    in property <bool> busy;
+    in-out property <bool> shown;
+    callback update-now();
+    callback update-later();
+    callback update-skip();
+}

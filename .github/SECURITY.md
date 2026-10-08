@@ -6,5 +6,5 @@ open a port. Updates come from this repository's releases and are checked
 against the SHA-256 in the release's integrity file before they're installed.
 
 Report a security problem by opening a
-[private advisory](https://github.com/RealWhyKnot/hr-osc-rust/security/advisories/new)
+[private advisory](https://github.com/RealWhyKnot/heartwire/security/advisories/new)
 rather than a public issue.

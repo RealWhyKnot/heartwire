@@ -1,12 +1,28 @@
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 use std::time::Duration;
 
 use slint::{Timer, TimerMode};
 
-use crate::AppWindow;
+use crate::ui::AppWindow;
 
 pub const FLASH: Duration = Duration::from_millis(120);
+
+thread_local! {
+    static BEAT: RefCell<Option<Rc<Beat>>> = const { RefCell::new(None) };
+}
+
+pub fn install(window: &AppWindow) {
+    BEAT.with(|slot| *slot.borrow_mut() = Some(Beat::new(window)));
+}
+
+pub fn update(connected: bool, bpm: u16) {
+    BEAT.with(|slot| {
+        if let Some(beat) = slot.borrow().as_ref() {
+            beat.update(connected, bpm);
+        }
+    });
+}
 
 pub fn interval(bpm: u16) -> Option<Duration> {
     (bpm > 0).then(|| Duration::from_millis(60_000 / u64::from(bpm.clamp(20, 300))))

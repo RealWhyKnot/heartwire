@@ -1,0 +1,73 @@
+import { Navigation, Settings } from "../state.slint";
+import { SmallButton } from "../widgets/small-button.slint";
+import { BluetoothTab } from "settings/bluetooth.slint";
+import { GeneralTab } from "settings/general.slint";
+import { HttpTab } from "settings/http.slint";
+import { OscTab } from "settings/osc.slint";
+import { ParametersTab } from "settings/parameters.slint";
+import { PicoTab } from "settings/pico.slint";
+import { PulsoidTab } from "settings/pulsoid.slint";
+
+component TabButton inherits SmallButton {
+    in property <string> key;
+    active: Navigation.tab == root.key;
+    clicked => {
+        Navigation.tab = root.key;
+    }
+}
+
+export component SettingsPage inherits Rectangle {
+    tabs := VerticalLayout {
+        x: 0;
+        y: 8px;
+        width: 98px;
+        spacing: 8px;
+        alignment: start;
+        TabButton {
+            text: "General";
+            key: "general";
+        }
+        if Settings.uses-bluetooth: TabButton {
+            text: "Bluetooth";
+            key: "bluetooth";
+        }
+        if Settings.uses-pico: TabButton {
+            text: "Pico";
+            key: "pico";
+        }
+        if Settings.uses-http: TabButton {
+            text: "HTTP";
+            key: "http";
+        }
+        if Settings.uses-pulsoid: TabButton {
+            text: "Pulsoid";
+            key: "pulsoid";
+        }
+        TabButton {
+            text: "OSC";
+            key: "osc";
+        }
+        TabButton {
+            text: "Parameters";
+            key: "parameters";
+        }
+    }
+
+    content := Flickable {
+        x: 106px;
+        y: 8px;
+        width: 180px;
+        height: parent.height - 8px;
+        content-height: max(self.height, pane.preferred-height);
+        pane := VerticalLayout {
+            alignment: start;
+            if Navigation.tab == "general": GeneralTab { }
+            if Navigation.tab == "bluetooth": BluetoothTab { }
+            if Navigation.tab == "pico": PicoTab { }
+            if Navigation.tab == "http": HttpTab { }
+            if Navigation.tab == "pulsoid": PulsoidTab { }
+            if Navigation.tab == "osc": OscTab { }
+            if Navigation.tab == "parameters": ParametersTab { }
+        }
+    }
+}

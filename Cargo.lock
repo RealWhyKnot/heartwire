@@ -1641,6 +1641,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "heartwire"
+version = "0.0.0"
+dependencies = [
+ "btleplug",
+ "futures",
+ "i-slint-backend-testing",
+ "png",
+ "serde",
+ "serde_json",
+ "serialport",
+ "sha2",
+ "slint",
+ "slint-build",
+ "tokio",
+ "tungstenite",
+ "ureq",
+ "uuid",
+ "windows-sys 0.61.2",
+ "winresource",
+]
+
+[[package]]
 name = "heck"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1663,28 +1685,6 @@ name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
-
-[[package]]
-name = "hr-osc-rust"
-version = "0.0.0"
-dependencies = [
- "btleplug",
- "futures",
- "i-slint-backend-testing",
- "png",
- "serde",
- "serde_json",
- "serialport",
- "sha2",
- "slint",
- "slint-build",
- "tokio",
- "tungstenite",
- "ureq",
- "uuid",
- "windows-sys 0.61.2",
- "winresource",
-]
 
 [[package]]
 name = "htmlparser"

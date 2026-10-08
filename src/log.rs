@@ -9,9 +9,9 @@ const MAX_BYTES: u64 = 512 * 1024;
 static FILE: Mutex<Option<File>> = Mutex::new(None);
 
 pub fn init(dir: &Path) {
-    let path = dir.join("hr-osc-rust.log");
+    let path = dir.join("heartwire.log");
     if std::fs::metadata(&path).is_ok_and(|m| m.len() > MAX_BYTES) {
-        let _ = std::fs::rename(&path, dir.join("hr-osc-rust.old.log"));
+        let _ = std::fs::rename(&path, dir.join("heartwire.old.log"));
     }
     let file = OpenOptions::new()
         .create(true)

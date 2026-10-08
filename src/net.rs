@@ -10,7 +10,7 @@ pub fn agent(timeout: Duration) -> ureq::Agent {
     ureq::Agent::config_builder()
         .tls_config(tls)
         .timeout_global(Some(timeout))
-        .user_agent(format!("hr-osc-rust/{}", crate::version::VERSION))
+        .user_agent(format!("heartwire/{}", crate::version::VERSION))
         .build()
         .into()
 }

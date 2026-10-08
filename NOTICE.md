@@ -1,6 +1,6 @@
 # Third-party notices
 
-hr-osc-rust is under the GNU General Public License v3.0. See `LICENSE`.
+Heartwire is under the GNU General Public License v3.0. See `LICENSE`.
 
 ## Nunito
 

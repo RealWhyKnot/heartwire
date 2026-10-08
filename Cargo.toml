@@ -1,11 +1,11 @@
 [package]
-name = "hr-osc-rust"
+name = "heartwire"
 version = "0.0.0"
 edition = "2024"
 rust-version = "1.92"
-description = "Heart rate to VRChat OSC from Bluetooth straps, a Pico bridge, HTTP or Pulsoid"
+description = "Heart rate to VRChat over OSC from Bluetooth straps, a Pico bridge, HTTP or Pulsoid"
 license = "GPL-3.0-only"
-repository = "https://github.com/RealWhyKnot/hr-osc-rust"
+repository = "https://github.com/RealWhyKnot/heartwire"
 publish = false
 
 [dependencies]

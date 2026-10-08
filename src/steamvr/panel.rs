@@ -7,8 +7,8 @@ use slint::platform::software_renderer::{
 use slint::platform::{Platform, WindowAdapter, WindowEvent};
 use slint::{ComponentHandle, PhysicalSize, PlatformError};
 
-use crate::VrPanel;
 use crate::steamvr::PanelView;
+use crate::ui::{HeartRate, VrPanel};
 
 pub const SCALE: f32 = 2.0;
 pub const WIDTH: u32 = 650;
@@ -72,10 +72,14 @@ impl Panel {
     }
 
     pub fn render(&mut self, view: &PanelView) -> (&[u8], u32, u32) {
-        self.ui.set_connected(view.connected);
-        self.ui.set_bpm(i32::from(view.bpm));
-        self.ui.set_percent_text(view.percent.as_str().into());
-        self.ui.set_status(view.status.as_str().into());
+        self.ui.global::<HeartRate>().set_connected(view.connected);
+        self.ui.global::<HeartRate>().set_bpm(i32::from(view.bpm));
+        self.ui
+            .global::<HeartRate>()
+            .set_percent_text(view.percent.as_str().into());
+        self.ui
+            .global::<HeartRate>()
+            .set_status(view.status.as_str().into());
         slint::platform::update_timers_and_animations();
         self.window.request_redraw();
         let pixels = &mut self.pixels;
@@ -133,7 +137,7 @@ mod tests {
                 .filter(|&y| (0..WIDTH).any(|x| at(x, y) == [0xf8, 0x71, 0x71, 255]))
                 .count();
             assert!(red_rows > 100, "heart and bpm cover {red_rows} rows");
-            if let Some(dir) = std::env::var_os("HR_OSC_UI_DUMP") {
+            if let Some(dir) = std::env::var_os("HEARTWIRE_UI_DUMP") {
                 let file =
                     std::fs::File::create(std::path::Path::new(&dir).join("vr-panel.png")).unwrap();
                 let mut encoder = png::Encoder::new(std::io::BufWriter::new(file), WIDTH, HEIGHT);

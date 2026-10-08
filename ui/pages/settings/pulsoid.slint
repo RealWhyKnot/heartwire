@@ -1,0 +1,25 @@
+import { Settings } from "../../state.slint";
+import { Field } from "../../widgets/field.slint";
+import { GroupGap } from "../../widgets/group-gap.slint";
+import { Label } from "../../widgets/label.slint";
+import { SmallButton } from "../../widgets/small-button.slint";
+
+export component PulsoidTab inherits VerticalLayout {
+    spacing: 8px;
+    Label {
+        text: "Widget Id:";
+    }
+    Field {
+        text <=> Settings.widget-id;
+        edited(value) => {
+            Settings.setting("stromno_widget_id", value);
+        }
+    }
+    GroupGap { }
+    SmallButton {
+        text: "Reconnect";
+        clicked => {
+            Settings.restart-source();
+        }
+    }
+}

@@ -1,4 +1,4 @@
-pub const VERSION: &str = match option_env!("HR_OSC_VERSION") {
+pub const VERSION: &str = match option_env!("HEARTWIRE_VERSION") {
     Some(v) => v,
     None => "dev",
 };
@@ -20,7 +20,7 @@ impl Channel {
     }
 
     pub fn current() -> Channel {
-        Channel::parse(option_env!("HR_OSC_CHANNEL"))
+        Channel::parse(option_env!("HEARTWIRE_CHANNEL"))
     }
 
     pub fn name(self) -> &'static str {

@@ -1,0 +1,54 @@
+import { Navigation, Updates } from "../state.slint";
+import { Theme } from "../theme.slint";
+import { Link } from "../widgets/link.slint";
+
+export component AboutPage inherits Rectangle {
+    icon := Image {
+        x: 16px;
+        y: 16px;
+        width: 48px;
+        height: 48px;
+        source: @image-url("../../assets/icon.png");
+    }
+    title := Text {
+        x: 76px;
+        y: 14px;
+        height: 36px;
+        font-size: 30px;
+        text: "Heartwire";
+        color: white;
+    }
+    version := Text {
+        x: 76px;
+        y: 51px;
+        height: 14px;
+        font-size: 16px;
+        vertical-alignment: center;
+        text: "version: " + Updates.current-version;
+        color: Theme.gray-500;
+    }
+    Link {
+        x: 16px;
+        y: 113px;
+        text: "GitHub";
+        clicked => {
+            Navigation.open-link("https://github.com/RealWhyKnot/heartwire");
+        }
+    }
+    Link {
+        x: 16px;
+        y: 145px;
+        text: "Pico firmware guide";
+        clicked => {
+            Navigation.open-link("https://github.com/RealWhyKnot/heartwire#pico-bridge");
+        }
+    }
+    Link {
+        x: 16px;
+        y: 165px;
+        text: "Inspired by hr-osc (kamyu1537)";
+        clicked => {
+            Navigation.open-link("https://github.com/kamyu1537/hr-osc");
+        }
+    }
+}

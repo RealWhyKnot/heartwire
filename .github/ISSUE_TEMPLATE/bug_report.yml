@@ -10,7 +10,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: hr-osc-rust version
+      label: Heartwire version
       description: Shown on the About tab.
       placeholder: 2026.10.9.0
     validations:
@@ -46,5 +46,5 @@ body:
     id: log
     attributes:
       label: Log
-      description: hr-osc-rust.log from the settings folder (%APPDATA%\hr-osc-rust on Windows).
+      description: heartwire.log from the settings folder (%APPDATA%\heartwire on Windows).
       render: text

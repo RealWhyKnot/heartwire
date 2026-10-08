@@ -1,0 +1,25 @@
+import { Theme } from "theme.slint";
+import { Home } from "pages/home.slint";
+
+export component VrPanel inherits Window {
+    width: 325px;
+    height: 250px;
+    background: Theme.gray-900;
+    default-font-family: "Nunito";
+    default-font-size: 16px;
+    title := Text {
+        x: 8px;
+        y: 8px;
+        height: 24px;
+        vertical-alignment: center;
+        text: "Heartwire";
+        color: white;
+    }
+    Home {
+        x: 8px;
+        y: 38px;
+        width: 309px;
+        height: 204px;
+        animate: false;
+    }
+}

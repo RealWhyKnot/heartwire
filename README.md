@@ -1,4 +1,4 @@
-# hr-osc-rust
+# Heartwire
 
 Sends your heart rate to VRChat over OSC. It reads a Bluetooth chest strap or
 watch directly, a Raspberry Pi Pico W plugged in over USB, HTTP posts from
@@ -13,15 +13,15 @@ inside the app.
 ## Install
 
 Download the archive for your system from
-[Releases](https://github.com/RealWhyKnot/hr-osc-rust/releases), unpack it
-anywhere and run `hr-osc-rust.exe` (or `hr-osc-rust` on Linux and macOS).
+[Releases](https://github.com/RealWhyKnot/heartwire/releases), unpack it
+anywhere and run `heartwire.exe` (or `heartwire` on Linux and macOS).
 There's no installer and nothing else to set up.
 
 The app checks GitHub for a newer release when it starts and offers to update
 itself. Untick "Check for updates" under Settings > General to turn that off.
 
 If hr-osc has been used on this computer, its settings are copied over the first
-time hr-osc-rust starts. Close hr-osc first: both want port 8080 in HTTP mode.
+time Heartwire starts. Close hr-osc first: both want port 8080 in HTTP mode.
 
 ## Heart rate sources
 
@@ -57,7 +57,7 @@ and sends readings over its USB cable.
    `RPI-RP2`. Drop the MicroPython `.uf2` for your board on it:
    [Pico 2 W](https://micropython.org/download/RPI_PICO2_W/) or
    [Pico W](https://micropython.org/download/RPI_PICO_W/).
-2. Open Settings > Pico in hr-osc-rust and click Install Firmware. Put part of
+2. Open Settings > Pico in Heartwire and click Install Firmware. Put part of
    the strap's name in Strap Name first if there's more than one strap nearby.
 3. Put the strap on. The board's LED lights up once it's connected.
 
@@ -90,10 +90,10 @@ Both paths can be changed under Settings > Parameters. The OSC target is
 ## SteamVR
 
 On Windows, tick "Start with SteamVR" under Settings > General. SteamVR then
-starts hr-osc-rust along with itself, and a heart icon shows up in the SteamVR
+starts Heartwire along with itself, and a heart icon shows up in the SteamVR
 dashboard. The panel behind it shows your heart rate and where it's coming
 from. If SteamVR is closed when you tick the box, the app registers itself the
-next time SteamVR runs. Untick it to take hr-osc-rust off SteamVR's start-up
+next time SteamVR runs. Untick it to take Heartwire off SteamVR's start-up
 list again.
 
 When SteamVR started the app, closing SteamVR closes it too. A copy you opened
@@ -112,8 +112,8 @@ folder, open it once from the new place and the entry follows.
 
 ## Files
 
-Settings and the log live in `%APPDATA%\hr-osc-rust` on Windows,
-`~/.config/hr-osc-rust` on Linux and `~/Library/Application Support/hr-osc-rust`
+Settings and the log live in `%APPDATA%\heartwire` on Windows,
+`~/.config/heartwire` on Linux and `~/Library/Application Support/heartwire`
 on macOS.
 
 ## Building

@@ -1,0 +1,29 @@
+import { Navigation } from "../state.slint";
+import { NavItem } from "../widgets/nav-item.slint";
+
+component PageLink inherits NavItem {
+    in property <int> index;
+    active: Navigation.page == root.index;
+    clicked => {
+        Navigation.page = root.index;
+    }
+}
+
+export component NavBar inherits Rectangle {
+    height: 26px;
+    PageLink {
+        x: 0;
+        text: "Home";
+        index: 0;
+    }
+    PageLink {
+        x: 54px;
+        text: "Settings";
+        index: 1;
+    }
+    PageLink {
+        x: 125px;
+        text: "About";
+        index: 2;
+    }
+}

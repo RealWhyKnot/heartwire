@@ -1,0 +1,40 @@
+import { HeartRate, Settings } from "../../state.slint";
+import { Theme } from "../../theme.slint";
+import { Label } from "../../widgets/label.slint";
+
+export component BluetoothTab inherits VerticalLayout {
+    spacing: 8px;
+    Label {
+        text: "Device:";
+    }
+    VerticalLayout {
+        spacing: 2px;
+        for device in HeartRate.devices: Rectangle {
+            height: 24px;
+            border-radius: 2px;
+            background: device-touch.has-hover ? Theme.gray-800 : Theme.input;
+            device-label := Text {
+                x: 8px;
+                width: parent.width - 16px;
+                height: parent.height;
+                vertical-alignment: center;
+                font-size: 14px;
+                text: device.name;
+                overflow: elide;
+                color: device.selected ? Theme.cyan-400 : Theme.gray-400;
+            }
+            device-touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => {
+                    Settings.device-picked(device.address);
+                }
+            }
+        }
+    }
+    status := Text {
+        font-size: 12px;
+        text: HeartRate.status;
+        color: Theme.gray-500;
+        wrap: word-wrap;
+    }
+}

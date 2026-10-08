@@ -1,0 +1,42 @@
+import { HeartRate, Settings } from "../../state.slint";
+import { Theme } from "../../theme.slint";
+import { Field } from "../../widgets/field.slint";
+import { GroupGap } from "../../widgets/group-gap.slint";
+import { Label } from "../../widgets/label.slint";
+import { SmallButton } from "../../widgets/small-button.slint";
+
+export component PicoTab inherits VerticalLayout {
+    spacing: 8px;
+    Label {
+        text: "Board:";
+    }
+    board := Text {
+        font-size: 14px;
+        text: HeartRate.status == "" ? "Not in use" : HeartRate.status;
+        color: Theme.gray-400;
+        wrap: word-wrap;
+    }
+    GroupGap { }
+    Label {
+        text: "Strap Name (optional):";
+    }
+    Field {
+        text <=> Settings.pico-strap;
+        placeholder: "first strap found";
+        edited(value) => {
+            Settings.setting("pico_strap_name", value);
+        }
+    }
+    SmallButton {
+        text: "Install Firmware";
+        clicked => {
+            Settings.install-firmware();
+        }
+    }
+    notice := Text {
+        font-size: 12px;
+        text: HeartRate.notice == "" ? "The board needs MicroPython first." : HeartRate.notice;
+        color: Theme.gray-500;
+        wrap: word-wrap;
+    }
+}

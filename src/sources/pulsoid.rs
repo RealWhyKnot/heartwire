@@ -5,7 +5,7 @@ use serde_json::Value;
 use tungstenite::Message;
 
 use super::{Context, Wake};
-use crate::hr;
+use crate::heart_rate;
 
 const RPC_URL: &str = "https://api.stromno.com/v1/api/public/rpc";
 const RETRY: Duration = Duration::from_secs(5);
@@ -64,13 +64,13 @@ pub fn ramiel_url(reply: &str) -> Result<String, String> {
         .ok_or_else(|| "reply has no socket address".into())
 }
 
-pub fn heart_rate(message: &str) -> Option<u16> {
+pub fn bpm_from_message(message: &str) -> Option<u16> {
     let value: Value = serde_json::from_str(message).ok()?;
     let rate = &value["data"]["heartRate"];
     let bpm = rate
         .as_f64()
         .or_else(|| rate.as_str()?.trim().parse().ok())?;
-    hr::parse_bpm_text(&bpm.to_string())
+    heart_rate::parse_bpm_text(&bpm.to_string())
 }
 
 fn listen(ctx: &Context, url: &str) {
@@ -105,7 +105,7 @@ fn listen(ctx: &Context, url: &str) {
     while !ctx.stopped() {
         match socket.read() {
             Ok(Message::Text(text)) => {
-                if let Some(bpm) = heart_rate(&text) {
+                if let Some(bpm) = bpm_from_message(&text) {
                     ctx.reading(bpm);
                 }
             }
@@ -146,12 +146,12 @@ mod tests {
     #[test]
     fn socket_messages() {
         assert_eq!(
-            heart_rate(r#"{"timestamp":1,"data":{"heartRate":72}}"#),
+            bpm_from_message(r#"{"timestamp":1,"data":{"heartRate":72}}"#),
             Some(72)
         );
-        assert_eq!(heart_rate(r#"{"data":{"heartRate":"81"}}"#), Some(81));
-        assert_eq!(heart_rate(r#"{"data":{"heartRate":0}}"#), None);
-        assert_eq!(heart_rate(r#"{"data":{}}"#), None);
-        assert_eq!(heart_rate("ping"), None);
+        assert_eq!(bpm_from_message(r#"{"data":{"heartRate":"81"}}"#), Some(81));
+        assert_eq!(bpm_from_message(r#"{"data":{"heartRate":0}}"#), None);
+        assert_eq!(bpm_from_message(r#"{"data":{}}"#), None);
+        assert_eq!(bpm_from_message("ping"), None);
     }
 }
