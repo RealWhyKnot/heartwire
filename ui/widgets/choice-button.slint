@@ -1,0 +1,18 @@
+export component ChoiceButton inherits Rectangle {
+    in property <string> text;
+    in property <color> idle;
+    in property <color> hover;
+    callback clicked();
+    border-radius: 8px;
+    background: touch.has-hover ? root.hover : root.idle;
+    label := Text {
+        text: root.text;
+        color: white;
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+}

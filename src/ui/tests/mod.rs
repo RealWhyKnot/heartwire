@@ -2,6 +2,7 @@ mod layout;
 mod reference;
 mod scenes;
 mod taskbar;
+mod welcome;
 
 use std::cell::Cell;
 use std::collections::HashMap;

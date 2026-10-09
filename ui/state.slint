@@ -61,3 +61,9 @@ export global Updates {
     callback update-later();
     callback update-skip();
 }
+
+export global Welcome {
+    in-out property <bool> shown;
+    callback import-hr-osc();
+    callback skip();
+}

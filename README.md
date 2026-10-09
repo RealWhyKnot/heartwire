@@ -21,8 +21,8 @@ There's no installer and nothing else to set up.
 The app checks GitHub for a newer release when it starts and offers to update
 itself. Untick "Check for updates" under Settings > General to turn that off.
 
-If hr-osc has been used on this computer, its settings are copied over the first
-time Heartwire starts. Close hr-osc first: both want port 8080 in HTTP mode.
+If hr-osc has been used on this computer, Heartwire offers to bring its settings
+over the first time it starts. Close hr-osc first: both want port 8080 in HTTP mode.
 
 ## Heart rate sources
 

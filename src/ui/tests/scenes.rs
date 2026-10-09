@@ -144,6 +144,10 @@ pub(super) fn scenes() -> Vec<(String, Setup)> {
             a.global::<Settings>().set_max_heart_rate("".into());
         }),
     );
+    add(
+        "welcome",
+        Box::new(|a| a.global::<crate::ui::Welcome>().set_shown(true)),
+    );
     add("about", Box::new(|a| a.global::<Navigation>().set_page(2)));
     add(
         "about-beta",

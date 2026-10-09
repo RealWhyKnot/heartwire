@@ -15,13 +15,24 @@ pub fn data_dir() -> PathBuf {
     base.unwrap_or_else(std::env::temp_dir).join("heartwire")
 }
 
-fn upstream_config(base: &Path) -> Option<PathBuf> {
+fn hr_osc_config(base: &Path) -> Option<PathBuf> {
     let path = base
         .parent()?
         .join("me.kamyu.hr-osc")
         .join("data")
         .join("config.json");
     path.is_file().then_some(path)
+}
+
+pub struct Loaded {
+    pub config: Config,
+    pub hr_osc: Option<PathBuf>,
+}
+
+pub fn read_hr_osc(path: &Path) -> Option<Config> {
+    std::fs::read_to_string(path)
+        .ok()
+        .map(|text| Config::from_json(&text))
 }
 
 pub struct Store {
@@ -35,20 +46,19 @@ impl Store {
         }
     }
 
-    pub fn load(&self) -> Config {
+    pub fn load(&self) -> Loaded {
         if let Ok(text) = std::fs::read_to_string(&self.path) {
-            return Config::from_json(&text);
+            return Loaded {
+                config: Config::from_json(&text),
+                hr_osc: None,
+            };
         }
-        let dir = self.path.parent().unwrap_or(Path::new("."));
-        let config = upstream_config(dir)
-            .and_then(|p| std::fs::read_to_string(p).ok())
-            .map(|text| {
-                crate::log::write("imported settings from hr-osc");
-                Config::from_json(&text)
-            })
-            .unwrap_or_default();
+        let config = Config::default();
         self.save(&config);
-        config
+        Loaded {
+            config,
+            hr_osc: hr_osc_config(self.path.parent().unwrap_or(Path::new("."))),
+        }
     }
 
     pub fn save(&self, config: &Config) {
@@ -70,30 +80,74 @@ mod tests {
     use super::*;
     use crate::config::Service;
 
+    struct Scratch(PathBuf);
+
+    impl Scratch {
+        fn new(name: &str) -> Scratch {
+            let root =
+                std::env::temp_dir().join(format!("heartwire-{name}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&root);
+            std::fs::create_dir_all(&root).unwrap();
+            Scratch(root)
+        }
+
+        fn hr_osc(&self, json: &str) -> PathBuf {
+            let dir = self.0.join("me.kamyu.hr-osc").join("data");
+            std::fs::create_dir_all(&dir).unwrap();
+            let path = dir.join("config.json");
+            std::fs::write(&path, json).unwrap();
+            path
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
     #[test]
-    fn store_round_trips_and_imports_upstream() {
-        let root = std::env::temp_dir().join(format!("heartwire-test-{}", std::process::id()));
-        let ours = root.join("heartwire");
-        let theirs = root.join("me.kamyu.hr-osc").join("data");
-        std::fs::create_dir_all(&theirs).unwrap();
-        std::fs::write(
-            theirs.join("config.json"),
-            r#"{"service_type":"http","max_heart_rate":190}"#,
-        )
-        .unwrap();
-        let store = Store::new(&ours);
-        let loaded = store.load();
-        assert_eq!(loaded.service_type, Service::Http);
-        assert_eq!(loaded.max_heart_rate, 190);
-        let mut changed = loaded.clone();
-        changed.max_heart_rate = 210;
-        store.save(&changed);
-        assert_eq!(Store::new(&ours).load(), changed);
-        let _ = std::fs::remove_file(ours.join("config.json"));
-        let _ = std::fs::remove_file(theirs.join("config.json"));
-        let _ = std::fs::remove_dir(&theirs);
-        let _ = std::fs::remove_dir(root.join("me.kamyu.hr-osc"));
-        let _ = std::fs::remove_dir(&ours);
-        let _ = std::fs::remove_dir(&root);
+    fn first_run_offers_hr_osc_settings_without_applying_them() {
+        let scratch = Scratch::new("first-run");
+        let found = scratch.hr_osc(r#"{"service_type":"http","max_heart_rate":190}"#);
+        let loaded = Store::new(&scratch.0.join("heartwire")).load();
+        assert_eq!(loaded.config, Config::default());
+        assert_eq!(loaded.hr_osc.as_deref(), Some(found.as_path()));
+        let imported = read_hr_osc(&found).unwrap();
+        assert_eq!(imported.service_type, Service::Http);
+        assert_eq!(imported.max_heart_rate, 190);
+    }
+
+    #[test]
+    fn the_offer_is_made_only_once() {
+        let scratch = Scratch::new("second-run");
+        scratch.hr_osc(r#"{"service_type":"http"}"#);
+        let store = Store::new(&scratch.0.join("heartwire"));
+        assert!(store.load().hr_osc.is_some());
+        assert!(store.load().hr_osc.is_none());
+    }
+
+    #[test]
+    fn no_offer_without_hr_osc() {
+        let scratch = Scratch::new("no-hr-osc");
+        assert!(
+            Store::new(&scratch.0.join("heartwire"))
+                .load()
+                .hr_osc
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn saved_settings_round_trip() {
+        let scratch = Scratch::new("round-trip");
+        let store = Store::new(&scratch.0.join("heartwire"));
+        let mut config = store.load().config;
+        config.max_heart_rate = 210;
+        store.save(&config);
+        assert_eq!(
+            Store::new(&scratch.0.join("heartwire")).load().config,
+            config
+        );
     }
 }

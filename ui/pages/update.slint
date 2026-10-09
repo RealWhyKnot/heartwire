@@ -1,24 +1,6 @@
 import { Updates } from "../state.slint";
 import { Theme } from "../theme.slint";
-
-component UpdateButton inherits Rectangle {
-    in property <string> text;
-    in property <color> idle;
-    in property <color> hover;
-    callback clicked();
-    border-radius: 8px;
-    background: touch.has-hover ? root.hover : root.idle;
-    label := Text {
-        text: root.text;
-        color: white;
-    }
-    touch := TouchArea {
-        mouse-cursor: pointer;
-        clicked => {
-            root.clicked();
-        }
-    }
-}
+import { ChoiceButton } from "../widgets/choice-button.slint";
 
 export component UpdatePage inherits Rectangle {
     Rectangle {
@@ -49,22 +31,22 @@ export component UpdatePage inherits Rectangle {
         if !Updates.busy: Rectangle {
             y: 100px;
             height: 36px;
-            UpdateButton {
+            ChoiceButton {
                 x: 0;
                 width: parent.width - 4px - 72px;
                 text: "Update";
-                idle: Theme.update-button;
-                hover: Theme.update-button-hover;
+                idle: Theme.accept;
+                hover: Theme.accept-hover;
                 clicked => {
                     Updates.update-now();
                 }
             }
-            UpdateButton {
+            ChoiceButton {
                 x: parent.width - 72px;
                 width: 72px;
                 text: "Later";
-                idle: Theme.later-button;
-                hover: Theme.later-button-hover;
+                idle: Theme.decline;
+                hover: Theme.decline-hover;
                 clicked => {
                     Updates.update-later();
                 }

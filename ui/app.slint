@@ -1,14 +1,15 @@
 import "./fonts/Nunito-Regular.ttf";
 import "./fonts/Nunito-Bold.ttf";
 import { Theme } from "theme.slint";
-import { Navigation, Updates } from "state.slint";
+import { Navigation, Updates, Welcome } from "state.slint";
 import { AboutPage } from "pages/about.slint";
 import { Home } from "pages/home.slint";
 import { NavBar } from "pages/nav-bar.slint";
 import { SettingsPage } from "pages/settings.slint";
 import { UpdatePage } from "pages/update.slint";
+import { WelcomePage } from "pages/welcome.slint";
 
-export { DeviceRow, HeartRate, Navigation, Settings, Updates } from "state.slint";
+export { DeviceRow, HeartRate, Navigation, Settings, Updates, Welcome } from "state.slint";
 export { VrPanel } from "vr-panel.slint";
 
 export component AppWindow inherits Window {
@@ -21,9 +22,11 @@ export component AppWindow inherits Window {
     default-font-family: "Nunito";
     default-font-size: 16px;
 
-    if Updates.shown: UpdatePage { }
+    if Welcome.shown: WelcomePage { }
 
-    if !Updates.shown: Rectangle {
+    if !Welcome.shown && Updates.shown: UpdatePage { }
+
+    if !Welcome.shown && !Updates.shown: Rectangle {
         x: 8px;
         y: 8px;
         width: parent.width - 16px;

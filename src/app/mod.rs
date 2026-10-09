@@ -4,6 +4,7 @@ mod instance;
 mod settings;
 pub(crate) mod taskbar;
 mod updates;
+mod welcome;
 
 use std::path::Path;
 use std::sync::mpsc;
@@ -88,7 +89,8 @@ pub fn run() {
     select_backend(minimized);
 
     let store = Store::new(&dir);
-    let config = store.load();
+    let loaded = store.load();
+    let config = loaded.config;
     let window = match AppWindow::new() {
         Ok(window) => window,
         Err(error) => {
@@ -113,6 +115,7 @@ pub fn run() {
 
     settings::bind(&window, &app, vr.sender());
     updates::bind(&window, &app, &dir, &config);
+    welcome::offer(&window, &app, loaded.hr_osc);
     window
         .global::<Navigation>()
         .on_open_link(|url| platform::open_url(&url));

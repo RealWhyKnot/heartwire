@@ -3,7 +3,7 @@ mod store;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-pub use store::{Store, data_dir};
+pub use store::{Store, data_dir, read_hr_osc};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
