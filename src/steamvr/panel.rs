@@ -44,7 +44,6 @@ pub struct Panel {
     window: Rc<MinimalSoftwareWindow>,
     ui: VrPanel,
     pixels: Vec<PremultipliedRgbaColor>,
-    bytes: Vec<u8>,
     drawn: bool,
 }
 
@@ -61,7 +60,6 @@ impl Panel {
             window,
             ui,
             pixels: vec![PremultipliedRgbaColor::default(); (WIDTH * HEIGHT) as usize],
-            bytes: vec![0; (WIDTH * HEIGHT * 4) as usize],
             drawn: false,
         })
     }
@@ -72,31 +70,25 @@ impl Panel {
     }
 
     pub fn render(&mut self, view: &PanelView) -> (&[u8], u32, u32) {
-        self.ui.global::<HeartRate>().set_connected(view.connected);
-        self.ui.global::<HeartRate>().set_bpm(i32::from(view.bpm));
-        self.ui
-            .global::<HeartRate>()
-            .set_percent_text(view.percent.as_str().into());
-        self.ui
-            .global::<HeartRate>()
-            .set_status(view.status.as_str().into());
+        let heart_rate = self.ui.global::<HeartRate>();
+        heart_rate.set_connected(view.connected);
+        heart_rate.set_bpm(i32::from(view.bpm));
+        heart_rate.set_percent_text(view.percent.as_str().into());
+        heart_rate.set_status(view.status.as_str().into());
         slint::platform::update_timers_and_animations();
         self.window.request_redraw();
         let pixels = &mut self.pixels;
+        let repaint = if self.drawn {
+            RepaintBufferType::ReusedBuffer
+        } else {
+            RepaintBufferType::NewBuffer
+        };
         self.window.draw_if_needed(|renderer| {
+            renderer.set_repaint_buffer_type(repaint);
             renderer.render(pixels, WIDTH as usize);
         });
-        for (out, p) in self
-            .bytes
-            .as_chunks_mut::<4>()
-            .0
-            .iter_mut()
-            .zip(&self.pixels)
-        {
-            *out = [p.red, p.green, p.blue, 255];
-        }
         self.drawn = true;
-        (&self.bytes, WIDTH, HEIGHT)
+        (bytemuck::cast_slice(&self.pixels), WIDTH, HEIGHT)
     }
 }
 
@@ -137,6 +129,10 @@ mod tests {
                 .filter(|&y| (0..WIDTH).any(|x| at(x, y) == [0xf8, 0x71, 0x71, 255]))
                 .count();
             assert!(red_rows > 100, "heart and bpm cover {red_rows} rows");
+            assert!(
+                bytes.as_chunks::<4>().0.iter().all(|p| p[3] == 255),
+                "the overlay is opaque"
+            );
             if let Some(dir) = std::env::var_os("HEARTWIRE_UI_DUMP") {
                 let file =
                     std::fs::File::create(std::path::Path::new(&dir).join("vr-panel.png")).unwrap();
@@ -151,5 +147,31 @@ mod tests {
             }
         });
         handle.join().unwrap();
+    }
+
+    #[test]
+    fn a_partial_repaint_matches_a_full_one() {
+        let view = |bpm: u16, connected: bool| PanelView {
+            connected,
+            bpm,
+            percent: format!("{:.2}", f32::from(bpm) / 200.0),
+            status: "Pico: COOSPO HW807".into(),
+        };
+        std::thread::spawn(move || {
+            let mut panel = Panel::new().unwrap();
+            panel.render(&view(72, true));
+            panel.render(&view(131, true));
+            let partial = panel.render(&view(64, false)).0.to_vec();
+            drop(panel);
+            let mut fresh = Panel::new().unwrap();
+            let full = fresh.render(&view(64, false)).0.to_vec();
+            assert!(
+                partial == full,
+                "the reused buffer drifted from a full repaint"
+            );
+            assert!(full.as_chunks::<4>().0.iter().all(|p| p[3] == 255));
+        })
+        .join()
+        .unwrap();
     }
 }
