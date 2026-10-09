@@ -2,7 +2,12 @@ use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
 use std::ptr::null;
 
-use windows_sys::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_NO_MORE_ITEMS, ERROR_SUCCESS};
+use windows_sys::Win32::Foundation::{
+    CloseHandle, ERROR_FILE_NOT_FOUND, ERROR_NO_MORE_ITEMS, ERROR_SUCCESS, INVALID_HANDLE_VALUE,
+};
+use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+    CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
+};
 use windows_sys::Win32::System::Registry::{
     HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, REG_SZ, RRF_RT_REG_SZ, RegCloseKey,
     RegDeleteKeyValueW, RegEnumValueW, RegGetValueW, RegOpenKeyExW, RegSetKeyValueW,
@@ -80,6 +85,38 @@ pub fn set_autostart(command: Option<&str>) -> Result<(), String> {
         Ok(())
     } else {
         Err(format!("registry error {status}"))
+    }
+}
+
+fn same_name(exe: &[u16], name: &str) -> bool {
+    let end = exe.iter().position(|&c| c == 0).unwrap_or(exe.len());
+    let lower = |c: u16| match u8::try_from(c) {
+        Ok(b) => u16::from(b.to_ascii_lowercase()),
+        Err(_) => c,
+    };
+    exe[..end]
+        .iter()
+        .copied()
+        .map(lower)
+        .eq(name.encode_utf16().map(lower))
+}
+
+pub fn process_running(name: &str) -> bool {
+    unsafe {
+        let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if snapshot == INVALID_HANDLE_VALUE {
+            return false;
+        }
+        let mut entry: PROCESSENTRY32W = std::mem::zeroed();
+        entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+        let mut found = false;
+        let mut more = Process32FirstW(snapshot, &mut entry) != 0;
+        while more && !found {
+            found = same_name(&entry.szExeFile, name);
+            more = Process32NextW(snapshot, &mut entry) != 0;
+        }
+        CloseHandle(snapshot);
+        found
     }
 }
 
@@ -164,6 +201,26 @@ pub fn focus_existing(title: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn process_names_compare_without_case() {
+        let mut exe = [0u16; 260];
+        for (slot, c) in exe.iter_mut().zip("VRServer.exe".encode_utf16()) {
+            *slot = c;
+        }
+        assert!(same_name(&exe, "vrserver.exe"));
+        assert!(!same_name(&exe, "vrserver.ex"));
+        assert!(!same_name(&exe, "vrserver.exe2"));
+        assert!(!same_name(&[0u16; 4], "a"));
+    }
+
+    #[test]
+    fn this_test_process_is_found() {
+        let exe = std::env::current_exe().unwrap();
+        let name = exe.file_name().unwrap().to_str().unwrap();
+        assert!(process_running(name));
+        assert!(!process_running("no-such-process-heartwire.exe"));
+    }
 
     #[test]
     fn the_app_id_is_claimed() {

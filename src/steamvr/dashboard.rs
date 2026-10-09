@@ -4,15 +4,10 @@ use std::time::Duration;
 
 use super::openvr;
 use super::registration::{apply_registration, write_files};
+use super::supervisor::SessionEnd;
 use super::{APP_KEY, Msg, PanelView};
 
 const OVERLAY_KEY: &str = "dev.whyknot.heartwire.panel";
-
-pub(super) enum SessionEnd {
-    SteamVrQuit,
-    AppQuit,
-    Unregistered,
-}
 
 pub(super) fn session(
     enabled: &mut bool,
@@ -109,18 +104,7 @@ pub(super) fn session(
                         return Ok(SessionEnd::Unregistered);
                     }
                 }
-                Ok(Msg::View {
-                    connected,
-                    bpm,
-                    percent,
-                    status,
-                }) => {
-                    let next = PanelView {
-                        connected,
-                        bpm,
-                        percent,
-                        status,
-                    };
+                Ok(Msg::View(next)) => {
                     stale |= next != *view;
                     *view = next;
                 }

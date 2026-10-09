@@ -230,13 +230,16 @@ mod tests {
     #[test]
     #[ignore = "needs SteamVR installed and closed"]
     fn background_init_leaves_steamvr_closed() {
-        assert!(!crate::steamvr::running(), "close SteamVR first");
+        assert!(
+            !crate::platform::process_running("vrserver.exe"),
+            "close SteamVR first"
+        );
         let mut vr = load_runtime().expect("SteamVR's openvr_api.dll loads");
         let error = vr.start(APP_BACKGROUND).expect_err("SteamVR isn't running");
         assert!(error.contains("NoServerForBackgroundApp"), "{error}");
         drop(vr);
         assert!(
-            !crate::steamvr::running(),
+            !crate::platform::process_running("vrserver.exe"),
             "the probe must not start SteamVR"
         );
     }

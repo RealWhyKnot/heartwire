@@ -28,12 +28,12 @@ impl Bridge {
 impl engine::Ui for Bridge {
     fn show(&self, view: &View) {
         let percent = format!("{:.2}", view.percent);
-        let _ = self.vr.send(steamvr::Msg::View {
+        let _ = self.vr.send(steamvr::Msg::View(steamvr::PanelView {
             connected: view.connected,
             bpm: view.bpm,
             percent: percent.clone(),
             status: view.status.clone(),
-        });
+        }));
         let view = view.clone();
         let shared = self.shared.clone();
         let _ = self.window.upgrade_in_event_loop(move |window| {

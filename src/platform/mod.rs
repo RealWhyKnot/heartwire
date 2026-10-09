@@ -11,6 +11,8 @@ use other as imp;
 use windows as imp;
 
 pub use imp::{claim_app_id, focus_existing, open_url, serial_ports_key};
+#[cfg(windows)]
+pub use windows::process_running;
 
 pub const MINIMIZED_FLAG: &str = "--minimized";
 
