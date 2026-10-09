@@ -4,7 +4,8 @@ use std::time::Duration;
 
 use slint::ComponentHandle;
 
-use super::settings::{self, App};
+use super::settings;
+use super::state::App;
 use crate::config::{Config, read_hr_osc};
 use crate::log;
 use crate::ui::{AppWindow, Welcome};

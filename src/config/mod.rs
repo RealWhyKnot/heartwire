@@ -131,6 +131,40 @@ impl Config {
         }
     }
 
+    pub fn set(&mut self, key: &str, value: &str) -> bool {
+        fn update<T: PartialEq>(field: &mut T, value: Option<T>) -> bool {
+            match value {
+                Some(value) if *field != value => {
+                    *field = value;
+                    true
+                }
+                _ => false,
+            }
+        }
+        fn text(field: &mut String, value: &str) -> bool {
+            if field == value {
+                return false;
+            }
+            value.clone_into(field);
+            true
+        }
+        let value = value.trim();
+        let number = value.parse::<u32>().ok().filter(|n| *n > 0);
+        let port = value.parse::<u16>().ok().filter(|n| *n > 0);
+        match key {
+            "connected_timeout" => update(&mut self.connected_timeout, number),
+            "max_heart_rate" => update(&mut self.max_heart_rate, number),
+            "http_server_port" => update(&mut self.http_server_port, port),
+            "osc_client_port" => update(&mut self.osc_client_port, port),
+            "osc_client_host" => text(&mut self.osc_client_host, value),
+            "osc_path_connected" => text(&mut self.osc_path_connected, value),
+            "osc_path_percent" => text(&mut self.osc_path_percent, value),
+            "stromno_widget_id" => text(&mut self.stromno_widget_id, value),
+            "pico_strap_name" => text(&mut self.pico_strap_name, value),
+            _ => false,
+        }
+    }
+
     pub fn source_key(&self) -> (Service, u16, &str, &str) {
         (
             self.service_type,
@@ -205,6 +239,85 @@ mod tests {
             Config::from_json(r#"{"max_heart_rate":0}"#).max_heart_rate,
             200
         );
+    }
+
+    #[test]
+    fn numbers_must_be_positive() {
+        let mut c = Config::default();
+        assert!(c.set("max_heart_rate", " 185 "));
+        assert_eq!(c.max_heart_rate, 185);
+        assert!(!c.set("max_heart_rate", "0"));
+        assert!(!c.set("max_heart_rate", "fast"));
+        assert_eq!(c.max_heart_rate, 185);
+    }
+
+    #[test]
+    fn ports_must_fit_in_sixteen_bits() {
+        let mut c = Config::default();
+        assert!(c.set("osc_client_port", "9001"));
+        assert_eq!(c.osc_client_port, 9001);
+        assert!(!c.set("osc_client_port", "70000"));
+        assert!(!c.set("http_server_port", "0"));
+        assert_eq!(c.http_server_port, 8080);
+    }
+
+    #[test]
+    fn text_fields_are_trimmed() {
+        let mut c = Config::default();
+        assert!(c.set("osc_client_host", "  192.168.1.5 "));
+        assert_eq!(c.osc_client_host, "192.168.1.5");
+        assert!(c.set("pico_strap_name", " Polar "));
+        assert_eq!(c.pico_strap_name, "Polar");
+    }
+
+    #[test]
+    fn setting_the_same_value_is_not_a_change() {
+        let mut c = Config::default();
+        for (key, value) in [
+            ("connected_timeout", "10"),
+            ("max_heart_rate", " 200"),
+            ("http_server_port", "8080"),
+            ("osc_client_port", "9000 "),
+            ("osc_client_host", "127.0.0.1"),
+            ("osc_path_connected", "/avatar/parameters/hr_connected"),
+            ("osc_path_percent", "/avatar/parameters/hr_percent"),
+            ("stromno_widget_id", ""),
+            ("pico_strap_name", "  "),
+        ] {
+            assert!(!c.set(key, value), "{key} = {value:?}");
+        }
+        assert_eq!(c, Config::default());
+    }
+
+    #[test]
+    fn every_text_key_reaches_its_field() {
+        let mut c = Config::default();
+        for key in [
+            "osc_client_host",
+            "osc_path_connected",
+            "osc_path_percent",
+            "stromno_widget_id",
+            "pico_strap_name",
+        ] {
+            assert!(c.set(key, "x"), "{key}");
+        }
+        assert_eq!(
+            [
+                &c.osc_client_host,
+                &c.osc_path_connected,
+                &c.osc_path_percent,
+                &c.stromno_widget_id,
+                &c.pico_strap_name
+            ],
+            ["x"; 5]
+        );
+    }
+
+    #[test]
+    fn unknown_keys_change_nothing() {
+        let mut c = Config::default();
+        assert!(!c.set("volume", "11"));
+        assert_eq!(c, Config::default());
     }
 
     #[test]

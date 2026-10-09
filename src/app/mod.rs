@@ -2,6 +2,7 @@ mod bridge;
 pub(crate) mod devices;
 mod instance;
 mod settings;
+mod state;
 pub(crate) mod taskbar;
 mod updates;
 mod welcome;
@@ -44,7 +45,7 @@ fn start_steamvr(config: &Config, dir: &Path, launched: bool) -> steamvr::Handle
             data_dir: dir.to_path_buf(),
             launched,
         },
-        settings::remember_steamvr_registration,
+        state::remember_steamvr_registration,
         || {
             let _ = slint::invoke_from_event_loop(|| {
                 let _ = slint::quit_event_loop();
@@ -110,8 +111,8 @@ pub fn run() {
 
     let (tx, rx) = mpsc::channel();
     let vr = start_steamvr(&config, &dir, launched_by_steamvr);
-    let app = settings::App::new(config.clone(), store, tx.clone());
-    let bridge = bridge::Bridge::new(&window, app.shared(), vr.sender());
+    let app = state::App::install(config.clone(), store, tx.clone());
+    let bridge = bridge::Bridge::new(&window, vr.sender());
     let engine_tx = tx.clone();
     let engine_config = config.clone();
     let engine = std::thread::Builder::new()

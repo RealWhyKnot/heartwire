@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use slint::{ComponentHandle, SharedString};
 
-use super::settings::App;
+use super::state::App;
 use crate::config::Config;
 use crate::log;
 use crate::ui::{AppWindow, Updates};
