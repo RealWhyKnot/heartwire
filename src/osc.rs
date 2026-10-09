@@ -42,6 +42,7 @@ pub struct Sender {
     socket: Option<UdpSocket>,
     target: SocketAddr,
     buf: Vec<u8>,
+    failures: Failures,
 }
 
 impl Sender {
@@ -50,6 +51,7 @@ impl Sender {
             socket: None,
             target,
             buf: Vec::with_capacity(64),
+            failures: Failures::default(),
         };
         sender.retarget(target);
         sender
@@ -84,8 +86,30 @@ impl Sender {
         }
         let Some(socket) = &self.socket else { return };
         encode(address, arg, &mut self.buf);
-        if let Err(error) = socket.send_to(&self.buf, self.target) {
-            crate::log::write(&format!("osc send to {}: {error}", self.target));
+        let result = socket.send_to(&self.buf, self.target);
+        if let Some(line) = self.failures.note(result.err(), self.target) {
+            crate::log::write(&line);
+        }
+    }
+}
+
+#[derive(Default)]
+struct Failures {
+    failing: bool,
+}
+
+impl Failures {
+    fn note(&mut self, error: Option<std::io::Error>, target: SocketAddr) -> Option<String> {
+        match (error, self.failing) {
+            (Some(error), false) => {
+                self.failing = true;
+                Some(format!("osc send to {target}: {error}"))
+            }
+            (None, true) => {
+                self.failing = false;
+                Some(format!("osc send to {target} works again"))
+            }
+            _ => None,
         }
     }
 }
@@ -130,6 +154,20 @@ mod tests {
             resolve("not a host name!", 9000),
             "127.0.0.1:9000".parse().unwrap()
         );
+    }
+
+    #[test]
+    fn a_failure_streak_is_logged_once_and_so_is_the_recovery() {
+        let target: SocketAddr = "127.0.0.1:9000".parse().unwrap();
+        let fail = || Some(std::io::Error::from(std::io::ErrorKind::ConnectionReset));
+        let mut failures = Failures::default();
+        let lines: Vec<String> = [fail(), fail(), fail(), None, None, fail()]
+            .into_iter()
+            .filter_map(|e| failures.note(e, target))
+            .collect();
+        assert_eq!(lines.len(), 3, "{lines:?}");
+        assert!(lines[0].starts_with("osc send to 127.0.0.1:9000:"));
+        assert_eq!(lines[1], "osc send to 127.0.0.1:9000 works again");
     }
 
     #[test]
