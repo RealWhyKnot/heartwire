@@ -2,11 +2,13 @@ mod request;
 
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use super::{Context, Wake};
 use crate::heart_rate;
-use request::{Request, parse_request};
+use request::{MAX_TOTAL, Request, parse_request};
+
+const REQUEST_TIME: Duration = Duration::from_secs(5);
 
 fn respond(stream: &mut TcpStream, status: &str, body: &str) {
     let response = format!(
@@ -16,21 +18,31 @@ fn respond(stream: &mut TcpStream, status: &str, body: &str) {
     let _ = stream.write_all(response.as_bytes());
 }
 
-fn handle(mut stream: TcpStream, ctx: &Context) {
-    let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
-    let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
+fn read_request(stream: &mut TcpStream, limit: Duration) -> Request {
+    let deadline = Instant::now() + limit;
     let mut buf = Vec::with_capacity(512);
     let mut chunk = [0u8; 1024];
-    let request = loop {
+    loop {
         match parse_request(&buf) {
             Request::Incomplete => {}
-            done => break done,
+            done => return done,
         }
-        match stream.read(&mut chunk) {
-            Ok(0) | Err(_) => break Request::Bad,
+        let left = deadline.saturating_duration_since(Instant::now());
+        if left.is_zero() || buf.len() >= MAX_TOTAL {
+            return Request::Bad;
+        }
+        let _ = stream.set_read_timeout(Some(left));
+        let room = chunk.len().min(MAX_TOTAL - buf.len());
+        match stream.read(&mut chunk[..room]) {
+            Ok(0) | Err(_) => return Request::Bad,
             Ok(n) => buf.extend_from_slice(&chunk[..n]),
         }
-    };
+    }
+}
+
+fn handle(mut stream: TcpStream, ctx: &Context, limit: Duration) {
+    let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
+    let request = read_request(&mut stream, limit);
     match request {
         Request::Get => respond(&mut stream, "200 OK", "hr-osc http server"),
         Request::Post(body) => match std::str::from_utf8(&body)
@@ -74,7 +86,7 @@ pub fn run(ctx: Context, port: u16) {
             return;
         }
         if let Ok(stream) = stream {
-            handle(stream, &ctx);
+            handle(stream, &ctx, REQUEST_TIME);
         }
     }
 }
@@ -82,6 +94,7 @@ pub fn run(ctx: Context, port: u16) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use request::Request;
 
     #[test]
     fn serves_readings_over_a_real_socket() {
@@ -105,5 +118,62 @@ mod tests {
         assert!(rx.iter().any(|e| e.reading() == Some(88)));
         stop.stop();
         worker.join().unwrap();
+    }
+
+    fn pair() -> (TcpStream, TcpStream) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (server, _) = listener.accept().unwrap();
+        (client, server)
+    }
+
+    #[test]
+    fn an_endless_body_is_cut_off_at_the_size_cap() {
+        let (mut client, mut server) = pair();
+        let sender = std::thread::spawn(move || {
+            let _ = client.write_all(b"POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n");
+            let junk = vec![b'f'; 4096];
+            for _ in 0..64 {
+                if client.write_all(&junk).is_err() {
+                    break;
+                }
+            }
+        });
+        let start = Instant::now();
+        assert_eq!(
+            read_request(&mut server, Duration::from_secs(10)),
+            Request::Bad
+        );
+        assert!(
+            start.elapsed() < Duration::from_secs(5),
+            "cut by size, not by time"
+        );
+        drop(server);
+        sender.join().unwrap();
+    }
+
+    #[test]
+    fn a_trickling_client_is_cut_off_at_the_deadline() {
+        let (mut client, mut server) = pair();
+        let sender = std::thread::spawn(move || {
+            for byte in b"POST / HTTP/1.1\r\nContent-Length: 2\r\n" {
+                if client.write_all(&[*byte]).is_err() {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(40));
+            }
+        });
+        let start = Instant::now();
+        assert_eq!(
+            read_request(&mut server, Duration::from_millis(300)),
+            Request::Bad
+        );
+        let took = start.elapsed();
+        assert!(
+            took >= Duration::from_millis(300) && took < Duration::from_secs(2),
+            "{took:?}"
+        );
+        drop(server);
+        sender.join().unwrap();
     }
 }

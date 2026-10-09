@@ -1,4 +1,5 @@
 const MAX_REQUEST: usize = 16 * 1024;
+pub const MAX_TOTAL: usize = 3 * MAX_REQUEST;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Request {
