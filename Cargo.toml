@@ -19,7 +19,7 @@ futures = { version = "0.3", default-features = false, features = ["std"] }
 uuid = { version = "1", default-features = false }
 ureq = { version = "3.4", default-features = false, features = ["native-tls-no-default"] }
 tungstenite = { version = "0.30", default-features = false, features = ["handshake", "native-tls"] }
-sha2 = "0.10"
+sha2 = "0.11"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 serialport = { version = "4.10", default-features = true }
