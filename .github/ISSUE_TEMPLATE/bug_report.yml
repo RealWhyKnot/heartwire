@@ -1,0 +1,50 @@
+name: Bug report
+description: Something does not work
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: hr-osc-rust version
+      description: Shown on the About tab.
+      placeholder: 2026.10.9.0
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: Windows 11 24H2 / macOS 15.2 / Fedora 41
+    validations:
+      required: true
+  - type: dropdown
+    id: service
+    attributes:
+      label: Service type
+      options:
+        - Auto
+        - Bluetooth
+        - Pico (USB)
+        - HTTP
+        - Pulsoid / Stromno
+  - type: input
+    id: device
+    attributes:
+      label: Heart rate device
+      placeholder: CooSpo H6 / Polar H10 / Garmin watch
+  - type: input
+    id: board
+    attributes:
+      label: Board and MicroPython version, if you use a Pico
+      placeholder: Pico 2 W, MicroPython 1.28.0
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: hr-osc-rust.log from the settings folder (%APPDATA%\hr-osc-rust on Windows).
+      render: text

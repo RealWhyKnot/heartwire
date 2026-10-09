@@ -1,0 +1,15 @@
+name: Commit message check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    uses: RealWhyKnot/workflows/.github/workflows/commit-msg-check.yml@v1
+    with:
+      check-conventional: true

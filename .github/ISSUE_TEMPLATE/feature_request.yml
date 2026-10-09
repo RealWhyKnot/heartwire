@@ -1,0 +1,13 @@
+name: Feature request
+description: Suggest a change
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like it to do
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why the current behaviour is not enough
