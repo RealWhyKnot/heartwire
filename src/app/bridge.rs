@@ -45,7 +45,7 @@ impl engine::Ui for Bridge {
             heart_rate.set_status(view.status.as_str().into());
             heart_rate.set_notice(view.notice.as_str().into());
             let mut found = shared.devices.lock().unwrap();
-            if *found != view.devices {
+            if !Arc::ptr_eq(&found, &view.devices) {
                 *found = view.devices;
                 heart_rate.set_devices(devices::model(&found, &shared.pinned_device()));
             }

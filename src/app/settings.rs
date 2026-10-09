@@ -17,7 +17,7 @@ const TYPING_PAUSE: Duration = Duration::from_millis(500);
 
 pub struct Shared {
     pub config: Mutex<Config>,
-    pub devices: Mutex<Vec<Device>>,
+    pub devices: Mutex<Arc<[Device]>>,
 }
 
 impl Shared {
@@ -42,7 +42,7 @@ impl App {
         let app = Rc::new(App {
             shared: Arc::new(Shared {
                 config: Mutex::new(config),
-                devices: Mutex::new(Vec::new()),
+                devices: Mutex::new(Arc::default()),
             }),
             store,
             tx,

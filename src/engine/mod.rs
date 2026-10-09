@@ -1,47 +1,15 @@
+#[cfg(test)]
+mod tests;
+mod view;
+
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 use std::time::{Duration, Instant};
 
 use crate::config::{Config, Service};
 use crate::osc::{self, Arg};
-use crate::sources::{self, Device};
+use crate::sources;
 
-pub enum Event {
-    Reading { generation: u64, bpm: u16 },
-    Status { generation: u64, text: String },
-    Devices { generation: u64, list: Vec<Device> },
-    Config(Box<Config>),
-    Restart,
-    InstallFirmware,
-    Quit,
-}
-
-impl Event {
-    #[cfg(test)]
-    pub fn reading(&self) -> Option<u16> {
-        match self {
-            Event::Reading { bpm, .. } => Some(*bpm),
-            _ => None,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct View {
-    pub connected: bool,
-    pub bpm: u16,
-    pub percent: f32,
-    pub status: String,
-    pub devices: Vec<Device>,
-    pub notice: String,
-}
-
-pub trait Ui {
-    fn show(&self, view: &View);
-}
-
-pub fn percent(bpm: u16, max: u32) -> f32 {
-    (f32::from(bpm) / max.max(1) as f32).clamp(0.0, 1.0)
-}
+pub use view::{Event, Ui, View, percent};
 
 struct Engine<U: Ui> {
     config: Config,
@@ -85,11 +53,11 @@ impl<U: Ui> Engine<U> {
         let percent = percent(bpm, self.config.max_heart_rate);
         self.osc
             .send(&self.config.osc_path_percent, Arg::Float(percent));
-        let was = self.view.clone();
+        let changed = !self.view.connected || self.view.bpm != bpm || self.view.percent != percent;
         self.set_connected(true);
         self.view.bpm = bpm;
         self.view.percent = percent;
-        if self.view != was {
+        if changed {
             self.ui.show(&self.view);
         }
     }
@@ -128,7 +96,7 @@ impl<U: Ui> Engine<U> {
             self.set_connected(false);
         }
         self.view.status.clear();
-        self.view.devices.clear();
+        self.view.devices = Default::default();
         self.view.notice.clear();
         self.start_source();
     }
@@ -193,8 +161,10 @@ pub fn run(config: Config, rx: Receiver<Event>, tx: Sender<Event>, ui: impl Ui) 
                 }
             }
             Ok(Event::Devices { generation, list }) if generation == engine.generation => {
-                engine.view.devices = list;
-                engine.ui.show(&engine.view);
+                if *engine.view.devices != *list {
+                    engine.view.devices = list.into();
+                    engine.ui.show(&engine.view);
+                }
             }
             Ok(Event::Config(config)) => engine.apply(*config),
             Ok(Event::Restart) => {
@@ -215,102 +185,5 @@ pub fn run(config: Config, rx: Receiver<Event>, tx: Sender<Event>, ui: impl Ui) 
     engine.stop_source();
     if engine.view.connected {
         engine.set_connected(false);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::net::UdpSocket;
-    use std::sync::{Arc, Mutex, mpsc};
-
-    #[derive(Clone, Default)]
-    struct Recorder(Arc<Mutex<Vec<View>>>);
-
-    impl Ui for Recorder {
-        fn show(&self, view: &View) {
-            self.0.lock().unwrap().push(view.clone());
-        }
-    }
-
-    fn decode(packet: &[u8]) -> (String, Arg) {
-        let end = packet.iter().position(|&b| b == 0).unwrap();
-        let address = String::from_utf8(packet[..end].to_vec()).unwrap();
-        let tag_at = (end / 4 + 1) * 4;
-        let arg = match &packet[tag_at..tag_at + 2] {
-            b",f" => Arg::Float(f32::from_be_bytes(
-                packet[tag_at + 4..tag_at + 8].try_into().unwrap(),
-            )),
-            b",T" => Arg::Bool(true),
-            b",F" => Arg::Bool(false),
-            other => panic!("unexpected tag {other:?}"),
-        };
-        (address, arg)
-    }
-
-    #[test]
-    fn percent_is_clamped() {
-        assert_eq!(percent(100, 200), 0.5);
-        assert_eq!(percent(250, 200), 1.0);
-        assert_eq!(percent(70, 0), 1.0);
-    }
-
-    #[test]
-    fn readings_reach_osc_and_time_out() {
-        let vrchat = UdpSocket::bind("127.0.0.1:0").unwrap();
-        vrchat
-            .set_read_timeout(Some(Duration::from_secs(5)))
-            .unwrap();
-        let config = Config {
-            service_type: Service::Http,
-            http_server_port: 0,
-            osc_client_port: vrchat.local_addr().unwrap().port(),
-            connected_timeout: 1,
-            max_heart_rate: 200,
-            ..Config::default()
-        };
-        let (tx, rx) = mpsc::channel();
-        let ui = Recorder::default();
-        let seen = ui.clone();
-        let engine_tx = tx.clone();
-        let worker = std::thread::spawn(move || run(config, rx, engine_tx, ui));
-        tx.send(Event::Reading {
-            generation: 1,
-            bpm: 100,
-        })
-        .unwrap();
-        tx.send(Event::Reading {
-            generation: 99,
-            bpm: 55,
-        })
-        .unwrap();
-        let mut buf = [0u8; 128];
-        let mut packets = Vec::new();
-        for _ in 0..3 {
-            let n = vrchat.recv(&mut buf).unwrap();
-            packets.push(decode(&buf[..n]));
-        }
-        assert_eq!(
-            packets[0],
-            ("/avatar/parameters/hr_percent".into(), Arg::Float(0.5))
-        );
-        assert_eq!(
-            packets[1],
-            ("/avatar/parameters/hr_connected".into(), Arg::Bool(true))
-        );
-        assert_eq!(
-            packets[2],
-            ("/avatar/parameters/hr_connected".into(), Arg::Bool(false))
-        );
-        tx.send(Event::Quit).unwrap();
-        worker.join().unwrap();
-        let views = seen.0.lock().unwrap();
-        assert!(
-            views
-                .iter()
-                .any(|v| v.connected && v.bpm == 100 && v.percent == 0.5)
-        );
-        assert!(!views.last().unwrap().connected);
-        assert!(views.iter().all(|v| v.bpm != 55));
     }
 }
