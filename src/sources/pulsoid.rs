@@ -21,7 +21,7 @@ pub fn run(ctx: &Context, widget: &str) {
         match socket_url(widget) {
             Ok(url) => listen(ctx, &url),
             Err(error) => {
-                crate::log::write(&format!("pulsoid widget lookup: {error}"));
+                let _ = crate::log::write_changed(&format!("pulsoid widget lookup: {error}"));
                 ctx.status("Pulsoid widget not found, retrying");
             }
         }

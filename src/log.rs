@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::Path;
@@ -7,6 +8,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 const MAX_BYTES: u64 = 512 * 1024;
 
 static FILE: Mutex<Option<File>> = Mutex::new(None);
+
+thread_local! {
+    static LAST: RefCell<String> = const { RefCell::new(String::new()) };
+}
 
 pub fn init(dir: &Path) {
     let path = dir.join("heartwire.log");
@@ -33,6 +38,18 @@ pub fn write(message: &str) {
     if let Some(file) = FILE.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
         let _ = file.write_all(line.as_bytes());
     }
+}
+
+pub fn write_changed(message: &str) -> bool {
+    LAST.with(|last| {
+        let mut last = last.borrow_mut();
+        if *last == message {
+            return false;
+        }
+        write(message);
+        message.clone_into(&mut last);
+        true
+    })
 }
 
 pub fn timestamp(secs: u64) -> String {
@@ -70,5 +87,13 @@ mod tests {
             super::timestamp(1_791_504_000 + 3_723),
             "2026-10-09 01:02:03Z"
         );
+    }
+
+    #[test]
+    fn repeats_are_written_once() {
+        assert!(super::write_changed("pico: no strap found"));
+        assert!(!super::write_changed("pico: no strap found"));
+        assert!(super::write_changed("pico: subscribed"));
+        assert!(super::write_changed("pico: no strap found"));
     }
 }

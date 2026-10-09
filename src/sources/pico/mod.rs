@@ -65,13 +65,13 @@ pub fn session(ctx: &Context, port: &str) {
     let mut serial = match open(port) {
         Ok(serial) => serial,
         Err(error) => {
-            crate::log::write(&format!("pico open {port}: {error}"));
+            let _ = crate::log::write_changed(&format!("pico open {port}: {error}"));
             ctx.status(format!("{port} is in use by another program"));
             ctx.sleep(RETRY);
             return;
         }
     };
-    crate::log::write(&format!("pico opened {port}"));
+    let _ = crate::log::write_changed(&format!("pico opened {port}"));
     ctx.status(format!("Pico on {port}"));
     let mut line = Vec::with_capacity(64);
     let mut buf = [0u8; 256];
@@ -104,7 +104,7 @@ pub fn session(ctx: &Context, port: &str) {
                     match parse_pico_line(&line) {
                         PicoLine::Reading(bpm) => ctx.reading(bpm),
                         PicoLine::Note(note) => {
-                            crate::log::write(&format!("pico: {note}"));
+                            let _ = crate::log::write_changed(&format!("pico: {note}"));
                             ctx.status(note_text(note));
                         }
                         PicoLine::Other => {}

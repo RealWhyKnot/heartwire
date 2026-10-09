@@ -60,7 +60,7 @@ async fn session(ctx: &Context, wanted: &str, interrupt: &mut dyn FnMut() -> boo
             Ok(None) if ctx.stopped() => return Outcome::Stopped,
             Ok(None) => return Outcome::Interrupted,
             Err(error) => {
-                crate::log::write(&format!("bluetooth scan: {error}"));
+                let _ = crate::log::write_changed(&format!("bluetooth scan: {error}"));
                 ctx.status("Bluetooth is off or unavailable");
                 if pause(ctx, Duration::from_secs(5)).await {
                     return Outcome::Stopped;

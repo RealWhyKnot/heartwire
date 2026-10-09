@@ -55,7 +55,7 @@ pub fn run(ctx: Context, port: u16) {
             Ok(listener) => break listener,
             Err(error) => {
                 ctx.status(format!("Port {port} is busy, retrying"));
-                crate::log::write(&format!("http bind {addr}: {error}"));
+                let _ = crate::log::write_changed(&format!("http bind {addr}: {error}"));
                 if ctx.sleep(Duration::from_secs(2)) {
                     return;
                 }
