@@ -142,6 +142,12 @@ fn supervise(
     } = options;
     let mut view = PanelView::default();
     let mut cooldown = Instant::now();
+    let mut last_error: Option<String> = None;
+    crate::log::write(if enabled {
+        "steamvr: waiting for SteamVR"
+    } else {
+        "steamvr: off"
+    });
     loop {
         if (enabled || registered) && Instant::now() >= cooldown && running() {
             #[cfg(windows)]
@@ -163,7 +169,10 @@ fn supervise(
                 Ok(SessionEnd::AppQuit) => return,
                 Ok(SessionEnd::Unregistered) => {}
                 Err(error) => {
-                    crate::log::write(&format!("steamvr: {error}"));
+                    if last_error.as_deref() != Some(error.as_str()) {
+                        crate::log::write(&format!("steamvr: {error}"));
+                        last_error = Some(error);
+                    }
                     cooldown = Instant::now() + Duration::from_secs(30);
                 }
             }
@@ -191,5 +200,14 @@ fn supervise(
             }
             Err(RecvTimeoutError::Timeout) => {}
         }
+    }
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    #[test]
+    #[ignore = "needs SteamVR running"]
+    fn sees_a_running_steamvr() {
+        assert!(super::running());
     }
 }

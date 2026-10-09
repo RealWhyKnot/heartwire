@@ -22,24 +22,30 @@ pub(super) fn session(
     rx: &Receiver<Msg>,
     view: &mut PanelView,
 ) -> Result<SessionEnd, String> {
+    let needs_registration = !*enabled || !*registered;
     let mut note = |state: bool| {
         if *registered != state {
             *registered = state;
             on_registered(state);
         }
     };
-    let mut vr = openvr::load_runtime()?;
-    if !*enabled {
-        vr.start(openvr::APP_BACKGROUND)?;
-        apply_registration(&vr, false, data_dir)?;
-        crate::log::write("steamvr: removed from SteamVR start-up");
-        note(false);
-        return Ok(SessionEnd::Unregistered);
+    if needs_registration {
+        let mut utility = openvr::load_runtime()?;
+        utility.start(openvr::APP_UTILITY)?;
+        apply_registration(&utility, *enabled, data_dir)?;
+        note(*enabled);
+        crate::log::write(if *enabled {
+            "steamvr: added to SteamVR start-up"
+        } else {
+            "steamvr: removed from SteamVR start-up"
+        });
+        if !*enabled {
+            return Ok(SessionEnd::Unregistered);
+        }
     }
+    let mut vr = openvr::load_runtime()?;
     vr.start(openvr::APP_OVERLAY)?;
-    apply_registration(&vr, true, data_dir)?;
-    note(true);
-    crate::log::write("steamvr: registered and connected");
+    crate::log::write("steamvr: dashboard connected");
     let (_, icon) = write_files(data_dir)?;
     let apps = vr.table("IVRApplications_007")?;
     let overlay = vr.table("IVROverlay_025")?;

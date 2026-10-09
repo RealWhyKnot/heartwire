@@ -5,7 +5,9 @@ use windows_sys::Win32::Foundation::{FreeLibrary, HMODULE};
 use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 
 pub const APP_OVERLAY: i32 = 2;
+#[cfg(test)]
 pub const APP_BACKGROUND: i32 = 3;
+pub const APP_UTILITY: i32 = 4;
 
 pub mod apps {
     pub const ADD_MANIFEST: usize = 0;
