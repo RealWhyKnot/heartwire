@@ -167,10 +167,10 @@ async fn stream(ctx: &Context, adapter: &Adapter, peripheral: Peripheral, label:
     ctx.status(format!("Bluetooth: {label}"));
     crate::log::write(&format!("bluetooth streaming from {label}"));
     let id = peripheral.id();
-    let mut tick = tokio::time::interval(STEP);
     let mut last = Instant::now();
     let mut no_contact = false;
     loop {
+        let check = tokio::time::Instant::from_std(last + SILENCE_CHECK);
         tokio::select! {
             note = notes.next() => match note {
                 Some(note) if note.uuid == HR_MEASUREMENT => {
@@ -199,17 +199,15 @@ async fn stream(ctx: &Context, adapter: &Adapter, peripheral: Peripheral, label:
                 None => break,
                 _ => {}
             },
-            _ = tick.tick() => {
-                if ctx.stopped() {
-                    let _ = peripheral.disconnect().await;
-                    return;
+            _ = ctx.stop_signal() => {
+                let _ = peripheral.disconnect().await;
+                return;
+            }
+            _ = tokio::time::sleep_until(check) => {
+                if !peripheral.is_connected().await.unwrap_or(false) {
+                    break;
                 }
-                if last.elapsed() >= SILENCE_CHECK {
-                    if !peripheral.is_connected().await.unwrap_or(false) {
-                        break;
-                    }
-                    last = Instant::now();
-                }
+                last = Instant::now();
             }
         }
     }
@@ -239,26 +237,15 @@ async fn subscribe(ctx: &Context, peripheral: &Peripheral) -> Option<btleplug::R
 async fn guarded<F: Future>(ctx: &Context, work: F) -> Option<F::Output> {
     tokio::select! {
         out = work => Some(out),
-        _ = until_stopped(ctx) => None,
-    }
-}
-
-async fn until_stopped(ctx: &Context) {
-    while !ctx.stopped() {
-        tokio::time::sleep(Duration::from_millis(250)).await;
+        _ = ctx.stop_signal() => None,
     }
 }
 
 async fn pause(ctx: &Context, duration: Duration) -> bool {
-    let end = Instant::now() + duration;
-    while !ctx.stopped() {
-        let left = end.saturating_duration_since(Instant::now());
-        if left.is_zero() {
-            return false;
-        }
-        tokio::time::sleep(left.min(Duration::from_millis(250))).await;
+    tokio::select! {
+        _ = tokio::time::sleep(duration) => ctx.stopped(),
+        _ = ctx.stop_signal() => true,
     }
-    true
 }
 
 #[cfg(test)]
@@ -280,6 +267,37 @@ mod tests {
         assert!(matches(&strap, "c0:ff:ee:00:11:22"));
         assert!(!matches(&strap, "polar"));
         assert!(!matches(&strap, "C0:FF:EE:00:11:23"));
+    }
+
+    fn runtime() -> tokio::runtime::Runtime {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap()
+    }
+
+    #[test]
+    fn a_pause_runs_its_full_length_without_a_stop() {
+        let (ctx, _rx, _stop) = Context::test();
+        let start = Instant::now();
+        assert!(!runtime().block_on(pause(&ctx, Duration::from_millis(60))));
+        assert!(start.elapsed() >= Duration::from_millis(60));
+    }
+
+    #[test]
+    fn a_stop_ends_a_pause_and_guarded_work_at_once() {
+        let (ctx, _rx, stop) = Context::test();
+        let worker = std::thread::spawn(move || {
+            let rt = runtime();
+            let start = Instant::now();
+            assert!(rt.block_on(pause(&ctx, Duration::from_secs(30))));
+            let guarded_out = rt.block_on(guarded(&ctx, std::future::pending::<()>()));
+            assert!(guarded_out.is_none());
+            start.elapsed()
+        });
+        std::thread::sleep(Duration::from_millis(20));
+        stop.stop();
+        assert!(worker.join().unwrap() < Duration::from_secs(1));
     }
 
     #[test]
