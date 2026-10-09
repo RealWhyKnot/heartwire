@@ -7,7 +7,7 @@ use serde::Deserialize;
 
 use crate::version::Channel;
 
-pub use download::download;
+pub use download::{download, parse_integrity};
 pub use install::apply;
 
 const RELEASES_URL: &str =

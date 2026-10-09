@@ -6,7 +6,8 @@ use std::time::{Duration, Instant};
 
 use super::{Context, Wake};
 use crate::heart_rate;
-use request::{MAX_TOTAL, Request, parse_request};
+use request::MAX_TOTAL;
+pub use request::{Request, parse_request};
 
 const REQUEST_TIME: Duration = Duration::from_secs(5);
 
@@ -94,7 +95,6 @@ pub fn run(ctx: Context, port: u16) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use request::Request;
 
     #[test]
     fn serves_readings_over_a_real_socket() {

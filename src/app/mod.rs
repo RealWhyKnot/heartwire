@@ -1,5 +1,5 @@
 mod bridge;
-mod devices;
+pub(crate) mod devices;
 mod instance;
 mod settings;
 pub(crate) mod taskbar;
@@ -70,6 +70,10 @@ fn show(window: &AppWindow, minimized: bool) -> bool {
 }
 
 pub fn run() {
+    if let Some(target) = crate::perf::requested() {
+        crate::perf::main(target);
+        return;
+    }
     let launched_by_steamvr = has_flag(steamvr::LAUNCH_FLAG);
     let minimized = launched_by_steamvr || has_flag(platform::MINIMIZED_FLAG);
     let dir = config::data_dir();
@@ -80,7 +84,6 @@ pub fn run() {
         return;
     };
     log::init(&dir);
-    platform::claim_app_id();
     platform::claim_app_id();
     log::write(&format!(
         "Heartwire {} ({}) {} starting",

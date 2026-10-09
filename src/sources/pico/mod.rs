@@ -9,7 +9,8 @@ use serialport::{SerialPort, SerialPortInfo, SerialPortType};
 
 use super::Context;
 
-pub use firmware::install;
+pub use firmware::{FIRMWARE_MAIN, install, write_file_script};
+pub use lines::{LineBuffer, PicoLine, note_text, parse_pico_line};
 pub use watch::PortWatch;
 
 pub const RP2_VID: u16 = 0x2E8A;

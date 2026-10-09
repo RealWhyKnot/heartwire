@@ -7,6 +7,7 @@ mod heart_rate;
 mod log;
 mod net;
 mod osc;
+mod perf;
 mod platform;
 mod sources;
 mod steamvr;
