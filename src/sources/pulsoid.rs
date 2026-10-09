@@ -154,4 +154,11 @@ mod tests {
         assert_eq!(bpm_from_message(r#"{"data":{}}"#), None);
         assert_eq!(bpm_from_message("ping"), None);
     }
+
+    #[test]
+    #[ignore = "talks to api.stromno.com"]
+    fn unknown_widget_is_reported_by_the_real_service() {
+        let error = socket_url("00000000-0000-0000-0000-000000000000").unwrap_err();
+        assert!(error.contains("EntityNotFound"), "{error}");
+    }
 }

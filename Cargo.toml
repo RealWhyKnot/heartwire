@@ -17,7 +17,7 @@ btleplug = "0.13"
 tokio = { version = "1", default-features = false, features = ["rt", "time", "macros"] }
 futures = { version = "0.3", default-features = false, features = ["std"] }
 uuid = { version = "1", default-features = false }
-ureq = { version = "3.4", default-features = false, features = ["native-tls-no-default"] }
+ureq = { version = "3.4", default-features = false, features = ["native-tls"] }
 tungstenite = { version = "0.30", default-features = false, features = ["handshake", "native-tls"] }
 sha2 = "0.11"
 
