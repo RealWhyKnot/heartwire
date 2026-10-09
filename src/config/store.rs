@@ -47,17 +47,35 @@ impl Store {
     }
 
     pub fn load(&self) -> Loaded {
-        if let Ok(text) = std::fs::read_to_string(&self.path) {
-            return Loaded {
-                config: Config::from_json(&text),
-                hr_osc: None,
-            };
+        let mut last_error = None;
+        for _ in 0..5 {
+            match std::fs::read_to_string(&self.path) {
+                Ok(text) => {
+                    return Loaded {
+                        config: Config::from_json(&text),
+                        hr_osc: None,
+                    };
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    let config = Config::default();
+                    self.save(&config);
+                    return Loaded {
+                        config,
+                        hr_osc: hr_osc_config(self.path.parent().unwrap_or(Path::new("."))),
+                    };
+                }
+                Err(error) => {
+                    last_error = Some(error);
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                }
+            }
         }
-        let config = Config::default();
-        self.save(&config);
+        if let Some(error) = last_error {
+            crate::log::write(&format!("reading settings: {error}, running on defaults"));
+        }
         Loaded {
-            config,
-            hr_osc: hr_osc_config(self.path.parent().unwrap_or(Path::new("."))),
+            config: Config::default(),
+            hr_osc: None,
         }
     }
 
@@ -148,6 +166,20 @@ mod tests {
         assert_eq!(
             Store::new(&scratch.0.join("heartwire")).load().config,
             config
+        );
+    }
+
+    #[test]
+    fn an_unreadable_file_is_never_overwritten() {
+        let scratch = Scratch::new("unreadable");
+        let dir = scratch.0.join("heartwire");
+        std::fs::create_dir_all(dir.join("config.json")).unwrap();
+        let loaded = Store::new(&dir).load();
+        assert_eq!(loaded.config, Config::default());
+        assert!(loaded.hr_osc.is_none());
+        assert!(
+            dir.join("config.json").is_dir(),
+            "the unreadable path is left alone"
         );
     }
 }
