@@ -338,12 +338,22 @@ pub fn sh_script(
 pub fn apply(archive: &Path, staging: &Path, log: &Path) -> Result<(), String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let install = exe.parent().ok_or("no install folder")?.to_path_buf();
-    let pid = std::process::id();
+    launch_helper(std::process::id(), archive, staging, &install, &exe, log).map(|_| ())
+}
+
+fn launch_helper(
+    pid: u32,
+    archive: &Path,
+    staging: &Path,
+    install: &Path,
+    exe: &Path,
+    log: &Path,
+) -> Result<std::process::Child, String> {
     let mut command = if cfg!(windows) {
         let script = staging.join("apply.ps1");
         std::fs::write(
             &script,
-            powershell_script(pid, archive, staging, &install, &exe, log),
+            powershell_script(pid, archive, staging, install, exe, log),
         )
         .map_err(|e| e.to_string())?;
         let mut c = Command::new("powershell.exe");
@@ -359,11 +369,8 @@ pub fn apply(archive: &Path, staging: &Path, log: &Path) -> Result<(), String> {
         c
     } else {
         let script = staging.join("apply.sh");
-        std::fs::write(
-            &script,
-            sh_script(pid, archive, staging, &install, &exe, log),
-        )
-        .map_err(|e| e.to_string())?;
+        std::fs::write(&script, sh_script(pid, archive, staging, install, exe, log))
+            .map_err(|e| e.to_string())?;
         let mut c = Command::new("/bin/sh");
         c.arg(&script);
         c
@@ -374,7 +381,7 @@ pub fn apply(archive: &Path, staging: &Path, log: &Path) -> Result<(), String> {
         use std::os::windows::process::CommandExt;
         command.creation_flags(0x0800_0000);
     }
-    command.spawn().map(|_| ()).map_err(|e| e.to_string())
+    command.spawn().map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -477,5 +484,78 @@ mod tests {
         );
         assert!(sh.contains("archive='C:/it'\\''s here/app.zip'"));
         assert!(sh.starts_with("#!/bin/sh\n"));
+    }
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("hr-osc-rust-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn helper_installs_the_archive_and_cleans_up() {
+        let root = scratch("helper");
+        let payload = root.join("payload");
+        let staging = root.join("staging");
+        let install = root.join("install");
+        for dir in [&payload, &staging, &install] {
+            std::fs::create_dir_all(dir).unwrap();
+        }
+        std::fs::write(payload.join("version.txt"), "new").unwrap();
+        std::fs::write(install.join("version.txt"), "old").unwrap();
+        let (archive, exe) = if cfg!(windows) {
+            let archive = staging.join("update.zip");
+            let status = Command::new("powershell.exe")
+                .args(["-NoProfile", "-Command"])
+                .arg(format!(
+                    "Compress-Archive -Path '{}' -DestinationPath '{}'",
+                    payload.join("*").display(),
+                    archive.display()
+                ))
+                .status()
+                .unwrap();
+            assert!(status.success());
+            (archive, PathBuf::from(r"C:\Windows\System32\rundll32.exe"))
+        } else {
+            let archive = staging.join("update.tar.gz");
+            let status = Command::new("tar")
+                .arg("-czf")
+                .arg(&archive)
+                .arg("-C")
+                .arg(&payload)
+                .arg(".")
+                .status()
+                .unwrap();
+            assert!(status.success());
+            (archive, PathBuf::from("/usr/bin/true"))
+        };
+        let log = root.join("update.log");
+        let mut child =
+            launch_helper(2_147_483_000, &archive, &staging, &install, &exe, &log).unwrap();
+        assert!(
+            child.wait().unwrap().success(),
+            "{:?}",
+            std::fs::read_to_string(&log)
+        );
+        assert_eq!(
+            std::fs::read_to_string(install.join("version.txt")).unwrap(),
+            "new"
+        );
+        assert!(!staging.exists(), "the staging folder is removed");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    #[ignore = "downloads the latest release from GitHub"]
+    fn downloads_and_verifies_a_real_release() {
+        let release = check("v2000.1.1.0", Channel::Release)
+            .expect("the releases API answers")
+            .expect("a release with assets for this platform");
+        let staging = scratch("download");
+        let archive =
+            download(&release, &staging, &|_| {}).expect("download passes the integrity check");
+        assert!(archive.metadata().unwrap().len() > 100_000);
+        let _ = std::fs::remove_dir_all(&staging);
     }
 }
