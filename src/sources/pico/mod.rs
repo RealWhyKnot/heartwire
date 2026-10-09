@@ -1,13 +1,12 @@
 mod firmware;
 mod lines;
+mod link;
 
-use std::io::{ErrorKind, Read, Write};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use serialport::{SerialPort, SerialPortInfo, SerialPortType};
 
 use super::Context;
-use lines::{PicoLine, note_text, parse_pico_line};
 
 pub use firmware::install;
 
@@ -19,7 +18,10 @@ const BAUD: u32 = 115_200;
 
 const RETRY: Duration = Duration::from_secs(3);
 
-const QUIET: Duration = Duration::from_secs(12);
+const TIMING: link::Timing = link::Timing {
+    quiet: Duration::from_secs(12),
+    backlog: Duration::from_millis(300),
+};
 
 pub fn pick(ports: &[SerialPortInfo]) -> Option<String> {
     let usb = |p: &&SerialPortInfo| match &p.port_type {
@@ -73,57 +75,10 @@ pub fn session(ctx: &Context, port: &str) {
     };
     let _ = crate::log::write_changed(&format!("pico opened {port}"));
     ctx.status(format!("Pico on {port}"));
-    let mut line = Vec::with_capacity(64);
-    let mut buf = [0u8; 256];
-    let mut heard = Instant::now();
-    let mut poked = false;
-    while !ctx.stopped() {
-        if heard.elapsed() >= QUIET {
-            if !poked {
-                crate::log::write(&format!("pico {port} is quiet, asking it to restart"));
-                let _ = serial.write_all(b"\x04");
-                poked = true;
-            } else {
-                ctx.status("The Pico is silent. Install the firmware in Settings > Pico");
-            }
-            heard = Instant::now();
-        }
-        match serial.read(&mut buf) {
-            Ok(0) => std::thread::sleep(Duration::from_millis(100)),
-            Ok(n) => {
-                if buf[..n].contains(&b'\n') {
-                    heard = Instant::now();
-                }
-                for &byte in &buf[..n] {
-                    if byte != b'\n' {
-                        if line.len() < 256 {
-                            line.push(byte);
-                        }
-                        continue;
-                    }
-                    match parse_pico_line(&line) {
-                        PicoLine::Reading(bpm) => ctx.reading(bpm),
-                        PicoLine::Note(note) => {
-                            let _ = crate::log::write_changed(&format!("pico: {note}"));
-                            ctx.status(note_text(note));
-                        }
-                        PicoLine::Other => {}
-                    }
-                    line.clear();
-                }
-            }
-            Err(error)
-                if matches!(
-                    error.kind(),
-                    ErrorKind::TimedOut | ErrorKind::WouldBlock | ErrorKind::Interrupted
-                ) => {}
-            Err(error) => {
-                crate::log::write(&format!("pico {port} lost: {error}"));
-                ctx.status("Pico unplugged, waiting");
-                ctx.sleep(RETRY);
-                return;
-            }
-        }
+    if let Err(error) = link::pump(ctx, port, &mut *serial, TIMING) {
+        crate::log::write(&format!("pico {port} lost: {error}"));
+        ctx.status("Pico unplugged, waiting");
+        ctx.sleep(RETRY);
     }
 }
 
