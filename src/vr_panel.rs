@@ -66,6 +66,7 @@ impl Panel {
         })
     }
 
+    #[cfg(windows)]
     pub fn drawn(&self) -> bool {
         self.drawn
     }

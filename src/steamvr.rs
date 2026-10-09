@@ -1,16 +1,27 @@
-use std::path::{Path, PathBuf};
-use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
+#[cfg(windows)]
+use std::path::Path;
+use std::path::PathBuf;
+use std::sync::mpsc::Sender;
+#[cfg(windows)]
+use std::sync::mpsc::{Receiver, RecvTimeoutError};
+#[cfg(windows)]
 use std::time::{Duration, Instant};
 
+#[cfg(any(windows, test))]
 pub const APP_KEY: &str = "dev.whyknot.hr-osc-rust";
 pub const LAUNCH_FLAG: &str = "--steamvr";
+#[cfg(windows)]
 const OVERLAY_KEY: &str = "dev.whyknot.hr-osc-rust.panel";
+#[cfg(windows)]
 const MANIFEST: &str = "hr-osc-rust.vrmanifest";
+#[cfg(windows)]
 const ICON: &str = "hr-osc-rust-icon.png";
+#[cfg(windows)]
 const ICON_BYTES: &[u8] = include_bytes!("../assets/icon.png");
 
 pub const SUPPORTED: bool = cfg!(windows);
 
+#[cfg_attr(not(windows), allow(dead_code))]
 pub enum Msg {
     Enable(bool),
     View {
@@ -22,6 +33,7 @@ pub enum Msg {
     Quit,
 }
 
+#[cfg(any(windows, test))]
 pub fn runtime_dirs(vrpath: &str) -> Vec<PathBuf> {
     serde_json::from_str::<serde_json::Value>(vrpath)
         .ok()
@@ -35,10 +47,12 @@ pub fn runtime_dirs(vrpath: &str) -> Vec<PathBuf> {
         .unwrap_or_default()
 }
 
+#[cfg(any(windows, test))]
 fn json_string(text: &str) -> String {
     serde_json::Value::String(text.to_owned()).to_string()
 }
 
+#[cfg(any(windows, test))]
 pub fn manifest(binary: &str, image: &str) -> String {
     format!(
         "{{\n  \"source\": \"builtin\",\n  \"applications\": [\n    {{\n      \"app_key\": {},\n      \"launch_type\": \"binary\",\n      \"binary_path_windows\": {},\n      \"arguments\": {},\n      \"is_dashboard_overlay\": true,\n      \"image_path\": {},\n      \"strings\": {{\n        \"en_us\": {{\n          \"name\": \"hr-osc-rust\",\n          \"description\": \"Heart rate to VRChat over OSC\"\n        }}\n      }}\n    }}\n  ]\n}}\n",
@@ -49,6 +63,7 @@ pub fn manifest(binary: &str, image: &str) -> String {
     )
 }
 
+#[cfg(windows)]
 fn write_files(data_dir: &Path) -> Result<(PathBuf, PathBuf), String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let beside = exe.parent().map(Path::to_path_buf);
@@ -111,11 +126,6 @@ pub fn running() -> bool {
         CloseHandle(snapshot);
         found
     }
-}
-
-#[cfg(not(windows))]
-pub fn running() -> bool {
-    false
 }
 
 #[cfg(windows)]
@@ -382,6 +392,7 @@ impl Drop for Handle {
     }
 }
 
+#[cfg_attr(not(windows), allow(dead_code))]
 pub struct Options {
     pub enabled: bool,
     pub registered: bool,
@@ -395,14 +406,21 @@ pub fn start(
     on_quit: impl Fn() + Send + 'static,
 ) -> Handle {
     let (tx, rx) = std::sync::mpsc::channel();
+    #[cfg(windows)]
     let thread = std::thread::Builder::new()
         .name("steamvr".into())
         .spawn(move || supervise(options, rx, on_registered, on_quit))
         .ok();
+    #[cfg(not(windows))]
+    let thread = {
+        drop((options, rx, on_registered, on_quit));
+        None
+    };
     Handle { tx, thread }
 }
 
 #[derive(Clone, Default, PartialEq)]
+#[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) struct PanelView {
     pub connected: bool,
     pub bpm: u16,
@@ -410,6 +428,7 @@ pub(crate) struct PanelView {
     pub status: String,
 }
 
+#[cfg(windows)]
 fn supervise(
     options: Options,
     rx: Receiver<Msg>,
