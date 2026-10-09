@@ -7,13 +7,14 @@ use windows_sys::Win32::System::Registry::{
     HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, REG_SZ, RRF_RT_REG_SZ, RegCloseKey,
     RegDeleteKeyValueW, RegEnumValueW, RegGetValueW, RegOpenKeyExW, RegSetKeyValueW,
 };
-use windows_sys::Win32::UI::Shell::ShellExecuteW;
+use windows_sys::Win32::UI::Shell::{SetCurrentProcessExplicitAppUserModelID, ShellExecuteW};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     FindWindowW, SW_RESTORE, SW_SHOWNORMAL, SetForegroundWindow, ShowWindow,
 };
 
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 const VALUE: &str = "Heartwire";
+const APP_ID: &str = "WhyKnot.Heartwire";
 
 fn wide(text: &str) -> Vec<u16> {
     OsStr::new(text).encode_wide().chain(Some(0)).collect()
@@ -80,6 +81,11 @@ pub fn set_autostart(command: Option<&str>) -> Result<(), String> {
     } else {
         Err(format!("registry error {status}"))
     }
+}
+
+pub fn claim_app_id() {
+    let id = wide(APP_ID);
+    unsafe { SetCurrentProcessExplicitAppUserModelID(id.as_ptr()) };
 }
 
 pub fn serial_ports_key() -> Option<Vec<u16>> {
@@ -153,4 +159,26 @@ pub fn focus_existing(title: &str) -> bool {
         SetForegroundWindow(window);
     }
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_app_id_is_claimed() {
+        use windows_sys::Win32::System::Com::CoTaskMemFree;
+        use windows_sys::Win32::UI::Shell::GetCurrentProcessExplicitAppUserModelID;
+        claim_app_id();
+        let mut id = std::ptr::null_mut();
+        let result = unsafe { GetCurrentProcessExplicitAppUserModelID(&mut id) };
+        assert_eq!(result, 0);
+        let text = unsafe {
+            let len = (0..).take_while(|&i| *id.add(i) != 0).count();
+            let text = String::from_utf16_lossy(std::slice::from_raw_parts(id, len));
+            CoTaskMemFree(id.cast());
+            text
+        };
+        assert_eq!(text, APP_ID);
+    }
 }

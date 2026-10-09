@@ -64,6 +64,8 @@ pub fn set_autostart(command: Option<&str>) -> Result<(), String> {
     }
 }
 
+pub fn claim_app_id() {}
+
 pub fn serial_ports_key() -> Option<Vec<u16>> {
     None
 }

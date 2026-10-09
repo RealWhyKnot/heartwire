@@ -79,6 +79,7 @@ pub fn run() {
         return;
     };
     log::init(&dir);
+    platform::claim_app_id();
     log::write(&format!(
         "Heartwire {} ({}) {} starting",
         version::VERSION,
