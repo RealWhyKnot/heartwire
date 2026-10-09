@@ -5,6 +5,7 @@ mod settings;
 pub(crate) mod taskbar;
 mod updates;
 mod welcome;
+mod window;
 
 use std::path::Path;
 use std::sync::mpsc;
@@ -80,6 +81,7 @@ pub fn run() {
     };
     log::init(&dir);
     platform::claim_app_id();
+    platform::claim_app_id();
     log::write(&format!(
         "Heartwire {} ({}) {} starting",
         version::VERSION,
@@ -101,6 +103,7 @@ pub fn run() {
     };
     settings::load(&window, &config);
     taskbar::install(&window);
+    window::track_on_screen(&window);
 
     let (tx, rx) = mpsc::channel();
     let vr = start_steamvr(&config, &dir, launched_by_steamvr);

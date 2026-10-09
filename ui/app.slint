@@ -14,6 +14,7 @@ export { VrPanel } from "vr-panel.slint";
 
 export component AppWindow inherits Window {
     in property <bool> beat;
+    in property <bool> on-screen: true;
     title: "Heartwire";
     icon: root.beat ? @image-url("../assets/icon-beat.png") : @image-url("../assets/icon.png");
     width: 325px;
@@ -39,6 +40,7 @@ export component AppWindow inherits Window {
             height: parent.height - 30px;
             Home {
                 visible: Navigation.page == 0;
+                animate: root.on-screen;
             }
             if Navigation.page == 1: SettingsPage { }
             if Navigation.page == 2: AboutPage { }
