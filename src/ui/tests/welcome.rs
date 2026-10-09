@@ -59,3 +59,15 @@ fn welcome_hides_the_rest_of_the_window() {
     render(&app);
     assert_eq!(all(&app, "NavItem::label").len(), 3);
 }
+
+#[test]
+fn welcome_text_is_centred() {
+    let app = app();
+    app.global::<Welcome>().set_shown(true);
+    let frame = render(&app);
+    for id in ["WelcomePage::title", "WelcomePage::message"] {
+        let ink = ink_in(&frame, rect(&one(&app, id)), 0.0).expect("text is drawn");
+        let centre = (ink.x0 + ink.x1) as f32 / 2.0;
+        assert_near(id, centre, WIDTH as f32 / 2.0, 1.5);
+    }
+}

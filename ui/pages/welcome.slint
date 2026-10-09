@@ -8,7 +8,9 @@ export component WelcomePage inherits Rectangle {
         height: 150px;
         title := Text {
             y: 0;
+            width: parent.width;
             height: 32px;
+            horizontal-alignment: center;
             font-size: 24px;
             font-weight: 700;
             text: "Welcome!";
@@ -19,6 +21,7 @@ export component WelcomePage inherits Rectangle {
             width: parent.width;
             height: 40px;
             font-size: 14px;
+            horizontal-alignment: center;
             wrap: word-wrap;
             text: "hr-osc settings were found on this computer. Bring them over?";
             color: Theme.gray-400;
