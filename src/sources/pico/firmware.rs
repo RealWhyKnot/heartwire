@@ -164,4 +164,17 @@ mod tests {
         assert_eq!(python_string("Polar H10"), "'Polar H10'");
         assert_eq!(python_string("it's"), "'it\\'s'");
     }
+
+    #[test]
+    #[ignore = "writes the firmware to the Pico plugged into this computer"]
+    fn installs_on_the_connected_pico() {
+        let port = super::super::find_port().expect("a Pico is plugged in");
+        install(&port, "").expect("the firmware installs");
+        std::thread::sleep(Duration::from_secs(2));
+        let mut serial = open(&port).expect("the board comes back after the reset");
+        let reply = read_until(&mut *serial, b"\n#", Duration::from_secs(25))
+            .or_else(|_| read_until(&mut *serial, b"\r\n", Duration::from_secs(5)))
+            .expect("the firmware prints a line");
+        assert!(!reply.is_empty());
+    }
 }
