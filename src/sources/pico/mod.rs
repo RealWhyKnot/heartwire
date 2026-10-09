@@ -1,6 +1,7 @@
 mod firmware;
 mod lines;
 mod link;
+mod watch;
 
 use std::time::Duration;
 
@@ -9,6 +10,7 @@ use serialport::{SerialPort, SerialPortInfo, SerialPortType};
 use super::Context;
 
 pub use firmware::install;
+pub use watch::PortWatch;
 
 pub const RP2_VID: u16 = 0x2E8A;
 
@@ -44,9 +46,13 @@ pub fn find_port() -> Option<String> {
 }
 
 pub fn run(ctx: &Context) {
+    let mut watch = PortWatch::default();
     while !ctx.stopped() {
-        match find_port() {
-            Some(port) => session(ctx, &port),
+        match watch.find() {
+            Some(port) => {
+                session(ctx, &port);
+                watch.forget();
+            }
             None => {
                 ctx.status("Waiting for a Pico");
                 ctx.sleep(RETRY);

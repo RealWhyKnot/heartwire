@@ -10,7 +10,7 @@ use other as imp;
 #[cfg(windows)]
 use windows as imp;
 
-pub use imp::{focus_existing, open_url};
+pub use imp::{focus_existing, open_url, serial_ports_key};
 
 pub const MINIMIZED_FLAG: &str = "--minimized";
 

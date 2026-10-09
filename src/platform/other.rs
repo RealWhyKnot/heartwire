@@ -64,6 +64,10 @@ pub fn set_autostart(command: Option<&str>) -> Result<(), String> {
     }
 }
 
+pub fn serial_ports_key() -> Option<Vec<u16>> {
+    None
+}
+
 pub fn open_url(url: &str) {
     let opener = if cfg!(target_os = "macos") {
         "open"

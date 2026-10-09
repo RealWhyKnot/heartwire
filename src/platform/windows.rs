@@ -2,9 +2,10 @@ use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
 use std::ptr::null;
 
-use windows_sys::Win32::Foundation::ERROR_SUCCESS;
+use windows_sys::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_NO_MORE_ITEMS, ERROR_SUCCESS};
 use windows_sys::Win32::System::Registry::{
-    HKEY_CURRENT_USER, REG_SZ, RRF_RT_REG_SZ, RegDeleteKeyValueW, RegGetValueW, RegSetKeyValueW,
+    HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, REG_SZ, RRF_RT_REG_SZ, RegCloseKey,
+    RegDeleteKeyValueW, RegEnumValueW, RegGetValueW, RegOpenKeyExW, RegSetKeyValueW,
 };
 use windows_sys::Win32::UI::Shell::ShellExecuteW;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
@@ -79,6 +80,51 @@ pub fn set_autostart(command: Option<&str>) -> Result<(), String> {
     } else {
         Err(format!("registry error {status}"))
     }
+}
+
+pub fn serial_ports_key() -> Option<Vec<u16>> {
+    let path = wide(r"HARDWARE\DEVICEMAP\SERIALCOMM");
+    let mut key: HKEY = std::ptr::null_mut();
+    let status = unsafe { RegOpenKeyExW(HKEY_LOCAL_MACHINE, path.as_ptr(), 0, KEY_READ, &mut key) };
+    if status == ERROR_FILE_NOT_FOUND {
+        return Some(Vec::new());
+    }
+    if status != ERROR_SUCCESS {
+        return None;
+    }
+    let mut out = Vec::new();
+    let mut name = [0u16; 256];
+    let mut data = [0u16; 128];
+    let mut index = 0;
+    let complete = loop {
+        let mut name_len = name.len() as u32;
+        let mut data_len = (data.len() * 2) as u32;
+        let status = unsafe {
+            RegEnumValueW(
+                key,
+                index,
+                name.as_mut_ptr(),
+                &mut name_len,
+                std::ptr::null(),
+                std::ptr::null_mut(),
+                data.as_mut_ptr().cast(),
+                &mut data_len,
+            )
+        };
+        if status == ERROR_NO_MORE_ITEMS {
+            break true;
+        }
+        if status != ERROR_SUCCESS {
+            break false;
+        }
+        out.extend_from_slice(&name[..name_len as usize]);
+        out.push(0);
+        out.extend_from_slice(&data[..data_len as usize / 2]);
+        out.push(0);
+        index += 1;
+    };
+    unsafe { RegCloseKey(key) };
+    complete.then_some(out)
 }
 
 pub fn open_url(url: &str) {
