@@ -87,6 +87,22 @@ can post to your computer's address.
 Both paths can be changed under Settings > Parameters. The OSC target is
 `127.0.0.1:9000` by default.
 
+## SteamVR
+
+On Windows, tick "Start with SteamVR" under Settings > General. SteamVR then
+starts hr-osc-rust along with itself, and a heart icon shows up in the SteamVR
+dashboard. The panel behind it shows your heart rate and where it's coming
+from. If SteamVR is closed when you tick the box, the app registers itself the
+next time SteamVR runs. Untick it to take hr-osc-rust off SteamVR's start-up
+list again.
+
+When SteamVR started the app, closing SteamVR closes it too. A copy you opened
+yourself keeps running.
+
+## Taskbar
+
+While readings arrive, the taskbar icon beats along with your heart rate.
+
 ## Start at login
 
 Tick "Start at login" under Settings > General. The app then starts minimized

@@ -9,10 +9,12 @@ mod net;
 mod osc;
 mod platform;
 mod sources;
+mod steamvr;
 #[cfg(test)]
 mod ui_tests;
 mod update;
 mod version;
+mod vr_panel;
 
 use std::fs::File;
 use std::path::PathBuf;
@@ -82,10 +84,19 @@ fn show_devices(window: &AppWindow, shared: &Shared) {
 struct Bridge {
     window: slint::Weak<AppWindow>,
     shared: Arc<Shared>,
+    vr: Option<std::sync::mpsc::Sender<steamvr::Msg>>,
 }
 
 impl engine::Ui for Bridge {
     fn show(&self, view: &View) {
+        if let Some(vr) = &self.vr {
+            let _ = vr.send(steamvr::Msg::View {
+                connected: view.connected,
+                bpm: view.bpm,
+                percent: format!("{:.2}", view.percent),
+                status: view.status.clone(),
+            });
+        }
         let view = view.clone();
         let shared = self.shared.clone();
         let _ = self.window.upgrade_in_event_loop(move |w| {
@@ -128,6 +139,8 @@ fn load_window(window: &AppWindow, config: &Config) {
     window.set_max_heart_rate(config.max_heart_rate.to_string().into());
     window.set_pico_strap(config.pico_strap_name.as_str().into());
     window.set_check_updates(config.check_updates);
+    window.set_steamvr(config.steamvr_autostart);
+    window.set_steamvr_supported(steamvr::SUPPORTED);
     window.set_autostart(platform::autostart_enabled());
     window.set_version(version::VERSION.into());
     window.set_percent_text(format!("{:.2}", engine::percent(0, config.max_heart_rate)).into());
@@ -272,12 +285,15 @@ fn run_update(
 }
 
 fn main() {
-    let minimized = std::env::args().any(|a| a == platform::MINIMIZED_FLAG);
+    let launched_by_steamvr = std::env::args().any(|a| a == steamvr::LAUNCH_FLAG);
+    let minimized = launched_by_steamvr || std::env::args().any(|a| a == platform::MINIMIZED_FLAG);
     let dir = config::data_dir();
     let _ = std::fs::create_dir_all(&dir);
     let lock = File::create(dir.join("hr-osc-rust.lock")).ok();
     if lock.as_ref().is_some_and(|f| f.try_lock().is_err()) {
-        platform::focus_existing(TITLE);
+        if !launched_by_steamvr {
+            platform::focus_existing(TITLE);
+        }
         return;
     }
     log::init(&dir);
@@ -315,9 +331,28 @@ fn main() {
         devices: Mutex::new(Vec::new()),
     });
     let (tx, rx) = mpsc::channel();
+    let registered_window = window.as_weak();
+    let vr = steamvr::start(
+        steamvr::Options {
+            enabled: config.steamvr_autostart,
+            registered: config.steamvr_registered,
+            data_dir: dir.clone(),
+            launched: launched_by_steamvr,
+        },
+        move |state| {
+            let _ = registered_window
+                .upgrade_in_event_loop(move |w| w.invoke_steamvr_registered(state));
+        },
+        || {
+            let _ = slint::invoke_from_event_loop(|| {
+                let _ = slint::quit_event_loop();
+            });
+        },
+    );
     let bridge = Bridge {
         window: window.as_weak(),
         shared: shared.clone(),
+        vr: Some(vr.sender()),
     };
     let engine_tx = tx.clone();
     let engine_config = config.clone();
@@ -384,6 +419,27 @@ fn main() {
             if let Some(w) = weak.upgrade() {
                 w.set_autostart(platform::autostart_enabled());
             }
+        });
+    }
+    {
+        let app = app.clone();
+        let sender = vr.sender();
+        window.on_steamvr_toggled(move |on| {
+            app.edit(Duration::ZERO, |c| {
+                c.steamvr_autostart = on;
+                true
+            });
+            let _ = sender.send(steamvr::Msg::Enable(on));
+        });
+    }
+    {
+        let app = app.clone();
+        window.on_steamvr_registered(move |state| {
+            app.edit(Duration::ZERO, |c| {
+                let changed = c.steamvr_registered != state;
+                c.steamvr_registered = state;
+                changed
+            });
         });
     }
     {
@@ -478,6 +534,7 @@ fn main() {
     app.store.save(&config);
     let _ = tx.send(Event::Quit);
     let _ = engine.join();
+    drop(vr);
     log::write("stopped");
     drop(lock);
 }

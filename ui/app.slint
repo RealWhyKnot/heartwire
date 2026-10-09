@@ -274,8 +274,9 @@ component Home inherits Rectangle {
     in property <int> bpm;
     in property <string> percent-text;
     in property <string> status;
+    in property <bool> animate: true;
     property <length> heart-top: 21px;
-    property <float> t: root.connected && root.visible ? mod(animation-tick() / 1ms, 1000) / 1000 : 1;
+    property <float> t: root.connected && root.visible && root.animate ? mod(animation-tick() / 1ms, 1000) / 1000 : 1;
     property <float> p: min(1, root.t / 0.75);
     property <float> eased: 1 - pow(1 - root.p, 3);
     if root.connected: Heart {
@@ -347,6 +348,37 @@ component Home inherits Rectangle {
     }
 }
 
+export component VrPanel inherits Window {
+    width: 325px;
+    height: 250px;
+    background: Palette.gray-900;
+    default-font-family: "Nunito";
+    default-font-size: 16px;
+    in property <bool> connected;
+    in property <int> bpm;
+    in property <string> percent-text: "0.00";
+    in property <string> status;
+    panel-title := Text {
+        x: 8px;
+        y: 8px;
+        height: 24px;
+        vertical-alignment: center;
+        text: "hr-osc-rust";
+        color: white;
+    }
+    Home {
+        x: 8px;
+        y: 38px;
+        width: 309px;
+        height: 204px;
+        animate: false;
+        connected: root.connected;
+        bpm: root.bpm;
+        percent-text: root.percent-text;
+        status: root.status;
+    }
+}
+
 export component AppWindow inherits Window {
     title: "hr-osc-rust";
     icon: root.beat ? @image-url("../assets/icon-beat.png") : @image-url("../assets/icon.png");
@@ -373,6 +405,8 @@ export component AppWindow inherits Window {
     in-out property <string> connected-timeout;
     in-out property <bool> autostart;
     in-out property <bool> check-updates;
+    in-out property <bool> steamvr;
+    in property <bool> steamvr-supported;
     in-out property <string> http-port;
     in-out property <string> widget-id;
     in-out property <string> osc-host;
@@ -391,6 +425,8 @@ export component AppWindow inherits Window {
     callback service-picked(int);
     callback autostart-toggled(bool);
     callback updates-toggled(bool);
+    callback steamvr-toggled(bool);
+    callback steamvr-registered(bool);
     callback device-picked(string);
     callback restart-source();
     callback install-firmware();
@@ -642,6 +678,13 @@ export component AppWindow inherits Window {
                                 checked <=> root.autostart;
                                 toggled(on) => {
                                     root.autostart-toggled(on);
+                                }
+                            }
+                            if root.steamvr-supported: Check {
+                                text: "Start with SteamVR";
+                                checked <=> root.steamvr;
+                                toggled(on) => {
+                                    root.steamvr-toggled(on);
                                 }
                             }
                             Check {
