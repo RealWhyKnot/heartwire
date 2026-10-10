@@ -188,7 +188,7 @@ pub fn all() -> Vec<Case> {
                 black_box(&receiver);
             }
         }),
-        Case::new("engine", "reading to OSC and the window", 2 * MS, {
+        Case::new("engine", "reading to OSC and the window", 200 * US, {
             let mut pipeline = Pipeline::start();
             move || pipeline.reading()
         }),
@@ -299,10 +299,10 @@ pub fn all() -> Vec<Case> {
         Case::new("log", "format a log timestamp", 2 * US, || {
             black_box(crate::log::timestamp(black_box(1_791_504_000)));
         }),
-        Case::new("platform", "check the serial port list", 200 * US, || {
+        Case::new("platform", "check the serial port list", 50 * US, || {
             black_box(crate::platform::serial_ports_key());
         }),
-        Case::new("platform", "enumerate serial ports", 30 * MS, || {
+        Case::new("platform", "enumerate serial ports", 15 * MS, || {
             black_box(sources::pico::find_port());
         }),
         Case::new("platform", "read the autostart entry", MS, || {
@@ -316,7 +316,7 @@ pub fn all() -> Vec<Case> {
     cases.push(Case::new(
         "platform",
         "check whether SteamVR runs",
-        50 * MS,
+        20 * MS,
         || {
             black_box(crate::platform::process_running("vrserver.exe"));
         },

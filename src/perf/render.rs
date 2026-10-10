@@ -11,6 +11,7 @@ use slint::{ComponentHandle, PhysicalSize, PlatformError};
 use super::{Case, Settings, Timing, time};
 use crate::ui::{AppWindow, HeartRate, Navigation};
 
+const US: Duration = Duration::from_micros(1);
 const MS: Duration = Duration::from_millis(1);
 const WIDTH: u32 = 325;
 const HEIGHT: u32 = 250;
@@ -121,11 +122,11 @@ fn window_cases(screen: &Rc<RefCell<Screen>>) -> Vec<Case> {
         s.frame(true);
     };
     vec![
-        Case::new("ui", "main window full frame", 20 * MS, full_home),
-        Case::new("ui", "ping animation frame", 5 * MS, ping),
-        Case::new("ui", "ping frame while minimized", MS, hidden_ping),
-        Case::new("ui", "bpm change frame", 5 * MS, bpm_change),
-        Case::new("ui", "settings page full frame", 20 * MS, settings),
+        Case::new("ui", "main window full frame", MS, full_home),
+        Case::new("ui", "ping animation frame", 300 * US, ping),
+        Case::new("ui", "ping frame while minimized", 10 * US, hidden_ping),
+        Case::new("ui", "bpm change frame", 100 * US, bpm_change),
+        Case::new("ui", "settings page full frame", MS, settings),
     ]
 }
 
@@ -165,7 +166,7 @@ fn panel_timings(settings: Settings) -> Vec<Timing> {
     let mut cases = vec![Case::new(
         "steamvr",
         "VR panel frame after a bpm change",
-        10 * MS,
+        300 * US,
         changed,
     )];
     let mut timings: Vec<Timing> = cases.iter_mut().map(|c| time(c, settings)).collect();

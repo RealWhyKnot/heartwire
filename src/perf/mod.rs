@@ -215,6 +215,33 @@ mod tests {
     }
 
     #[test]
+    fn hidden_and_partial_frames_stay_cheaper_than_full_ones() {
+        let timings = render::timings(Settings {
+            per_case: Duration::from_millis(20),
+            samples: 5,
+        });
+        let median = |name: &str| {
+            timings
+                .iter()
+                .find(|t| t.name == name)
+                .unwrap_or_else(|| panic!("{name} was timed"))
+                .median
+        };
+        let shown = median("ping animation frame");
+        let hidden = median("ping frame while minimized");
+        assert!(
+            hidden * 20 < shown,
+            "a minimized tick took {hidden:?}, an on-screen ping frame {shown:?}"
+        );
+        let partial = median("VR panel frame after a bpm change");
+        let fresh = median("VR panel create and first frame");
+        assert!(
+            partial * 2 < fresh,
+            "a partial panel frame took {partial:?}, a fresh one {fresh:?}"
+        );
+    }
+
+    #[test]
     fn a_slow_case_is_flagged() {
         let mut case = Case::new("test", "sleep", Duration::from_micros(1), || {
             std::thread::sleep(Duration::from_millis(1));
