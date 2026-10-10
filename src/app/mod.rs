@@ -75,9 +75,16 @@ pub fn run() {
         crate::perf::main(target);
         return;
     }
+    let dir = config::data_dir();
+    let register = has_flag(steamvr::REGISTER_FLAG);
+    if register || has_flag(steamvr::UNREGISTER_FLAG) {
+        if dir.is_dir() {
+            log::init(&dir);
+        }
+        std::process::exit(steamvr::setup_command(register, &dir));
+    }
     let launched_by_steamvr = has_flag(steamvr::LAUNCH_FLAG);
     let minimized = launched_by_steamvr || has_flag(platform::MINIMIZED_FLAG);
-    let dir = config::data_dir();
     let Some(instance) = instance::acquire(&dir) else {
         if !launched_by_steamvr {
             platform::focus_existing(TITLE);

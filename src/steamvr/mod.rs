@@ -16,7 +16,27 @@ pub const APP_KEY: &str = "dev.whyknot.heartwire";
 
 pub const LAUNCH_FLAG: &str = "--steamvr";
 
+pub const REGISTER_FLAG: &str = "--register-steamvr";
+
+pub const UNREGISTER_FLAG: &str = "--unregister-steamvr";
+
 pub const SUPPORTED: bool = cfg!(windows);
+
+pub fn setup_command(register: bool, data_dir: &std::path::Path) -> i32 {
+    #[cfg(windows)]
+    {
+        if register {
+            registration::register_for_setup(data_dir)
+        } else {
+            registration::unregister_for_setup(data_dir)
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (register, data_dir);
+        0
+    }
+}
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct PanelView {
