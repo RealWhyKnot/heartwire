@@ -68,6 +68,32 @@ jobs:
       - name: Test
         run: cargo test --locked
 
+      - name: Install NSIS
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $want = 'v3.12'
+          $have = ''
+          $exe = 'C:\Program Files (x86)\NSIS\makensis.exe'
+          if (Test-Path -LiteralPath $exe) { $have = (& $exe /VERSION) }
+          if ($have -ne $want) {
+            choco install nsis --version 3.12.0 --force -y --no-progress
+            if ($LASTEXITCODE -ne 0) { throw "choco install nsis failed ($LASTEXITCODE)" }
+          }
+
+      - name: Installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cargo build --locked
+          if ($LASTEXITCODE -ne 0) { throw "cargo build failed ($LASTEXITCODE)" }
+          $payload = 'dist/payload'
+          New-Item -ItemType Directory -Force (Join-Path $payload 'firmware') | Out-Null
+          Copy-Item target/debug/heartwire.exe, README.md, LICENSE, NOTICE.md $payload
+          Copy-Item firmware/main.py, firmware/hr_config.example.py (Join-Path $payload 'firmware')
+          ./installer/build.ps1 -Payload $payload -Version 0.0.0.0-CI -OutFile dist/heartwire-setup.exe
+          ./installer/test.ps1 -Setup dist/heartwire-setup.exe -Payload $payload -Version 0.0.0.0-CI
+
       - name: Check the firmware
         if: runner.os == 'Linux'
         run: python3 -m py_compile firmware/main.py firmware/hr_config.example.py

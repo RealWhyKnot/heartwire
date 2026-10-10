@@ -140,10 +140,34 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "tar failed ($LASTEXITCODE)" }
           }
 
+      - name: Install NSIS
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $want = 'v3.12'
+          $have = ''
+          $exe = 'C:\Program Files (x86)\NSIS\makensis.exe'
+          if (Test-Path -LiteralPath $exe) { $have = (& $exe /VERSION) }
+          if ($have -ne $want) {
+            choco install nsis --version 3.12.0 --force -y --no-progress
+            if ($LASTEXITCODE -ne 0) { throw "choco install nsis failed ($LASTEXITCODE)" }
+          }
+
+      - name: Installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $version = $env:HEARTWIRE_VERSION
+          $name = "heartwire-$version-${{ matrix.rid }}"
+          ./installer/build.ps1 -Payload "dist/$name" -Version $version -OutFile "dist/$name-setup.exe"
+          ./installer/test.ps1 -Setup "dist/$name-setup.exe" -Payload "dist/$name" -Version $version
+
       - name: Checksums
         uses: RealWhyKnot/workflows/checksums@v1
         with:
-          archives: dist/*.${{ matrix.ext }}
+          archives: |
+            dist/*.${{ matrix.ext }}
+            ${{ runner.os == 'Windows' && 'dist/*-setup.exe' || '' }}
 
       - name: Upload build
         uses: actions/upload-artifact@v7
@@ -151,6 +175,7 @@ jobs:
           name: release-${{ matrix.rid }}
           path: |
             dist/*.${{ matrix.ext }}
+            dist/*-setup.exe
             dist/*.integrity.tsv
           retention-days: 3
 
@@ -180,6 +205,7 @@ jobs:
         with:
           archives: |
             dist/*.zip
+            dist/*-setup.exe
             dist/*.tar.gz
           manifest: 'false'
 
@@ -192,11 +218,12 @@ jobs:
           extra: |
             ## Downloads
 
-            - Windows: `heartwire-${{ needs.validate.outputs.version }}-win-x64.zip`
+            - Windows installer: `heartwire-${{ needs.validate.outputs.version }}-win-x64-setup.exe`
+            - Windows portable: `heartwire-${{ needs.validate.outputs.version }}-win-x64.zip`
             - Linux: `heartwire-${{ needs.validate.outputs.version }}-linux-x64.tar.gz`
             - macOS: `heartwire-${{ needs.validate.outputs.version }}-osx-arm64.tar.gz` (Apple silicon) or `-osx-x64.tar.gz` (Intel)
 
-            Each archive has a matching `.integrity.tsv` with the hash of the archive and every file in it.
+            Each download has a matching `.integrity.tsv` with its hash. The archive manifests also list every file inside.
 
             ${{ steps.checksums.outputs.table }}
 
@@ -210,5 +237,6 @@ jobs:
           draft-first: 'true'
           assets: |
             dist/*.zip
+            dist/*-setup.exe
             dist/*.tar.gz
             dist/*.integrity.tsv

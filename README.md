@@ -13,10 +13,13 @@ hr-bridge-pico: both jobs now happen inside the app.
 
 ## Install
 
-Download the archive for your system from
-[Releases](https://github.com/RealWhyKnot/heartwire/releases), unpack it
-anywhere and run `heartwire.exe` (or `heartwire` on Linux and macOS).
-There's no installer and nothing else to set up.
+On Windows, download `heartwire-<version>-win-x64-setup.exe` from
+[Releases](https://github.com/RealWhyKnot/heartwire/releases) and run it. It
+installs for your account only and doesn't need admin rights. Uninstall it from
+Settings > Apps > Installed apps. The uninstaller asks before deleting your settings.
+
+For a portable copy, or on Linux and macOS, download the archive for your system,
+unpack it anywhere and run `heartwire.exe` (or `heartwire`).
 
 The app checks GitHub for a newer release when it starts and offers to update
 itself. Untick "Check for updates" under Settings > General to turn that off.

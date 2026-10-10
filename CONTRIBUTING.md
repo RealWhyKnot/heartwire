@@ -22,6 +22,7 @@ subject that isn't a conventional commit.
 | `src/steamvr/` | SteamVR start-up registration and the dashboard panel. Every unsafe OpenVR call is in `openvr.rs` |
 | `src/perf/` | The performance suite behind `--perf` |
 | `src/update/` | Finding a newer release, the verified download, the install helper |
+| `installer/` | The Windows setup (NSIS), the script that builds it and the script that tests it |
 | `src/config/` | Settings file, defaults, and the one-time import from hr-osc |
 | `src/platform/` | Start at login and opening links, per operating system |
 | `ui/app.slint` | The window, composed from `ui/pages` and `ui/widgets` |
@@ -54,6 +55,17 @@ watches the taskbar pixels for the beat:
 cargo test --release --test taskbar_beat -- --ignored --nocapture
 ```
 
+`installer/build.ps1` packs a folder with the zip's files into the Windows setup.
+It needs [NSIS](https://nsis.sourceforge.io) 3. CI builds one from a debug build,
+then `installer/test.ps1` installs, moves, reinstalls and uninstalls it under the
+current account. The test won't run where Heartwire is already installed or
+starts with Windows.
+
+```powershell
+./installer/build.ps1 -Payload dist/payload -Version 0.0.0.0-dev -OutFile dist/heartwire-setup.exe
+./installer/test.ps1 -Setup dist/heartwire-setup.exe -Payload dist/payload -Version 0.0.0.0-dev
+```
+
 ## Performance
 
 `heartwire --perf report.txt` times every part of the app: parsing, OSC, the
@@ -70,7 +82,8 @@ the change needs context the subject can't hold.
 
 Tag `vYYYY.M.D.N` and push the tag. The release workflow checks the tag is the
 next one for its day, runs the tests, builds every platform and publishes the
-archives with notes built from the commit subjects since the last release.
+archives and the Windows setup with notes built from the commit subjects since
+the last release.
 
 ```bash
 git tag v2026.10.9.0
