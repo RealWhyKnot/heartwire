@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use super::openvr::{self, OpenVr};
+use super::openvr::OpenVr;
 use super::{APP_KEY, LAUNCH_FLAG};
 
 const MANIFEST: &str = "heartwire.vrmanifest";
@@ -53,42 +53,29 @@ pub(super) fn write_files(data_dir: &Path) -> Result<(PathBuf, PathBuf), String>
 }
 
 pub(super) fn apply_registration(vr: &OpenVr, enable: bool, data_dir: &Path) -> Result<(), String> {
-    let apps = vr.table("IVRApplications_007")?;
-    let key = openvr::cstr(APP_KEY);
-    unsafe {
-        let set_auto: openvr::SetAutoLaunchFn = apps.get(openvr::apps::SET_AUTO_LAUNCH);
-        if enable {
-            let (manifest, _) = write_files(data_dir)?;
-            let path = openvr::cstr(&manifest.display().to_string());
-            let add: openvr::AddManifestFn = apps.get(openvr::apps::ADD_MANIFEST);
-            let error = add(path.as_ptr(), false);
-            if error != 0 {
-                return Err(format!("adding the manifest failed ({error})"));
-            }
-            let error = set_auto(key.as_ptr(), true);
-            if error != 0 {
-                return Err(format!("turning on auto launch failed ({error})"));
-            }
-        } else {
-            let installed: openvr::IsInstalledFn = apps.get(openvr::apps::IS_INSTALLED);
-            if installed(key.as_ptr()) {
-                set_auto(key.as_ptr(), false);
-            }
-            let remove: openvr::RemoveManifestFn = apps.get(openvr::apps::REMOVE_MANIFEST);
-            for dir in [
-                std::env::current_exe()
-                    .ok()
-                    .and_then(|e| e.parent().map(Path::to_path_buf)),
-                Some(data_dir.to_path_buf()),
-            ]
-            .into_iter()
-            .flatten()
-            {
-                let path = dir.join(MANIFEST);
-                if path.is_file() {
-                    remove(openvr::cstr(&path.display().to_string()).as_ptr());
-                }
-            }
+    let apps = vr.applications()?;
+    if enable {
+        let (manifest, _) = write_files(data_dir)?;
+        let error = apps.add_manifest(&manifest);
+        if error != 0 {
+            return Err(format!("adding the manifest failed ({error})"));
+        }
+        let error = apps.set_auto_launch(APP_KEY, true);
+        if error != 0 {
+            return Err(format!("turning on auto launch failed ({error})"));
+        }
+        return Ok(());
+    }
+    if apps.is_installed(APP_KEY) {
+        apps.set_auto_launch(APP_KEY, false);
+    }
+    let beside = std::env::current_exe()
+        .ok()
+        .and_then(|e| e.parent().map(Path::to_path_buf));
+    for dir in [beside, Some(data_dir.to_path_buf())].into_iter().flatten() {
+        let path = dir.join(MANIFEST);
+        if path.is_file() {
+            apps.remove_manifest(&path);
         }
     }
     Ok(())

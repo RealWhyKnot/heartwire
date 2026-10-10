@@ -1,4 +1,5 @@
 use std::ffi::{CStr, CString, c_char, c_void};
+use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
 use windows_sys::Win32::Foundation::{FreeLibrary, HMODULE};
@@ -9,7 +10,7 @@ pub const APP_OVERLAY: i32 = 2;
 pub const APP_BACKGROUND: i32 = 3;
 pub const APP_UTILITY: i32 = 4;
 
-pub mod apps {
+mod apps {
     pub const ADD_MANIFEST: usize = 0;
     pub const REMOVE_MANIFEST: usize = 1;
     pub const IS_INSTALLED: usize = 2;
@@ -17,7 +18,7 @@ pub mod apps {
     pub const SET_AUTO_LAUNCH: usize = 17;
 }
 
-pub mod overlay {
+mod overlay {
     pub const DESTROY: usize = 2;
     pub const SET_WIDTH: usize = 21;
     pub const IS_VISIBLE: usize = 43;
@@ -27,7 +28,7 @@ pub mod overlay {
     pub const CREATE_DASHBOARD: usize = 64;
 }
 
-pub mod system {
+mod system {
     pub const POLL_EVENT: usize = 29;
     pub const ACK_QUIT: usize = 43;
 }
@@ -58,10 +59,11 @@ pub struct OpenVr {
     active: bool,
 }
 
-pub struct Table(*const usize);
+#[derive(Clone, Copy)]
+struct Table(*const usize);
 
 impl Table {
-    pub unsafe fn get<F: Copy>(&self, index: usize) -> F {
+    unsafe fn get<F: Copy>(&self, index: usize) -> F {
         unsafe {
             let raw = *self.0.add(index);
             std::mem::transmute_copy(&raw)
@@ -69,7 +71,7 @@ impl Table {
     }
 }
 
-pub fn cstr(text: &str) -> CString {
+fn cstr(text: &str) -> CString {
     CString::new(text).unwrap_or_default()
 }
 
@@ -129,7 +131,7 @@ impl OpenVr {
             .into_owned()
     }
 
-    pub fn table(&self, version: &str) -> Result<Table, String> {
+    fn table(&self, version: &str) -> Result<Table, String> {
         let name = cstr(&format!("FnTable:{version}"));
         let mut error = 0i32;
         let raw = unsafe { (self.interface)(name.as_ptr(), &mut error) };
@@ -162,21 +164,163 @@ impl EncodeWideNull for std::ffi::OsStr {
     }
 }
 
-pub type AddManifestFn = unsafe extern "system" fn(*const c_char, bool) -> i32;
-pub type RemoveManifestFn = unsafe extern "system" fn(*const c_char) -> i32;
-pub type IsInstalledFn = unsafe extern "system" fn(*const c_char) -> bool;
-pub type IdentifyFn = unsafe extern "system" fn(u32, *const c_char) -> i32;
-pub type SetAutoLaunchFn = unsafe extern "system" fn(*const c_char, bool) -> i32;
-pub type DestroyFn = unsafe extern "system" fn(u64) -> i32;
-pub type SetWidthFn = unsafe extern "system" fn(u64, f32) -> i32;
-pub type IsVisibleFn = unsafe extern "system" fn(u64) -> bool;
-pub type PollOverlayFn = unsafe extern "system" fn(u64, *mut Event, u32) -> bool;
-pub type SetRawFn = unsafe extern "system" fn(u64, *mut c_void, u32, u32, u32) -> i32;
-pub type SetFromFileFn = unsafe extern "system" fn(u64, *const c_char) -> i32;
-pub type CreateDashboardFn =
+type AddManifestFn = unsafe extern "system" fn(*const c_char, bool) -> i32;
+type RemoveManifestFn = unsafe extern "system" fn(*const c_char) -> i32;
+type IsInstalledFn = unsafe extern "system" fn(*const c_char) -> bool;
+type IdentifyFn = unsafe extern "system" fn(u32, *const c_char) -> i32;
+type SetAutoLaunchFn = unsafe extern "system" fn(*const c_char, bool) -> i32;
+type DestroyFn = unsafe extern "system" fn(u64) -> i32;
+type SetWidthFn = unsafe extern "system" fn(u64, f32) -> i32;
+type IsVisibleFn = unsafe extern "system" fn(u64) -> bool;
+type PollOverlayFn = unsafe extern "system" fn(u64, *mut Event, u32) -> bool;
+type SetRawFn = unsafe extern "system" fn(u64, *mut c_void, u32, u32, u32) -> i32;
+type SetFromFileFn = unsafe extern "system" fn(u64, *const c_char) -> i32;
+type CreateDashboardFn =
     unsafe extern "system" fn(*const c_char, *const c_char, *mut u64, *mut u64) -> i32;
-pub type PollSystemFn = unsafe extern "system" fn(*mut Event, u32) -> bool;
-pub type AckQuitFn = unsafe extern "system" fn();
+type PollSystemFn = unsafe extern "system" fn(*mut Event, u32) -> bool;
+type AckQuitFn = unsafe extern "system" fn();
+
+pub type OverlayHandle = u64;
+
+pub struct Applications<'a> {
+    table: Table,
+    _vr: PhantomData<&'a OpenVr>,
+}
+
+pub struct Overlay<'a> {
+    table: Table,
+    _vr: PhantomData<&'a OpenVr>,
+}
+
+pub struct System<'a> {
+    table: Table,
+    _vr: PhantomData<&'a OpenVr>,
+}
+
+impl OpenVr {
+    pub fn applications(&self) -> Result<Applications<'_>, String> {
+        Ok(Applications {
+            table: self.table("IVRApplications_007")?,
+            _vr: PhantomData,
+        })
+    }
+
+    pub fn overlay(&self) -> Result<Overlay<'_>, String> {
+        Ok(Overlay {
+            table: self.table("IVROverlay_025")?,
+            _vr: PhantomData,
+        })
+    }
+
+    pub fn system(&self) -> Result<System<'_>, String> {
+        Ok(System {
+            table: self.table("IVRSystem_022")?,
+            _vr: PhantomData,
+        })
+    }
+}
+
+fn path_cstr(path: &Path) -> CString {
+    cstr(&path.display().to_string())
+}
+
+impl Applications<'_> {
+    pub fn add_manifest(&self, path: &Path) -> i32 {
+        let path = path_cstr(path);
+        unsafe { self.table.get::<AddManifestFn>(apps::ADD_MANIFEST)(path.as_ptr(), false) }
+    }
+
+    pub fn remove_manifest(&self, path: &Path) -> i32 {
+        let path = path_cstr(path);
+        unsafe { self.table.get::<RemoveManifestFn>(apps::REMOVE_MANIFEST)(path.as_ptr()) }
+    }
+
+    pub fn is_installed(&self, key: &str) -> bool {
+        let key = cstr(key);
+        unsafe { self.table.get::<IsInstalledFn>(apps::IS_INSTALLED)(key.as_ptr()) }
+    }
+
+    pub fn identify(&self, pid: u32, key: &str) -> i32 {
+        let key = cstr(key);
+        unsafe { self.table.get::<IdentifyFn>(apps::IDENTIFY)(pid, key.as_ptr()) }
+    }
+
+    pub fn set_auto_launch(&self, key: &str, on: bool) -> i32 {
+        let key = cstr(key);
+        unsafe { self.table.get::<SetAutoLaunchFn>(apps::SET_AUTO_LAUNCH)(key.as_ptr(), on) }
+    }
+}
+
+impl Overlay<'_> {
+    pub fn create_dashboard(
+        &self,
+        key: &str,
+        name: &str,
+    ) -> Result<(OverlayHandle, OverlayHandle), i32> {
+        let (key, name) = (cstr(key), cstr(name));
+        let (mut main, mut thumb) = (0, 0);
+        let error = unsafe {
+            self.table
+                .get::<CreateDashboardFn>(overlay::CREATE_DASHBOARD)(
+                key.as_ptr(),
+                name.as_ptr(),
+                &mut main,
+                &mut thumb,
+            )
+        };
+        if error == 0 {
+            Ok((main, thumb))
+        } else {
+            Err(error)
+        }
+    }
+
+    pub fn set_from_file(&self, handle: OverlayHandle, path: &Path) -> i32 {
+        let path = path_cstr(path);
+        unsafe { self.table.get::<SetFromFileFn>(overlay::SET_FROM_FILE)(handle, path.as_ptr()) }
+    }
+
+    pub fn set_width(&self, handle: OverlayHandle, meters: f32) -> i32 {
+        unsafe { self.table.get::<SetWidthFn>(overlay::SET_WIDTH)(handle, meters) }
+    }
+
+    pub fn set_rgba(&self, handle: OverlayHandle, pixels: &[u8], width: u32, height: u32) -> i32 {
+        assert_eq!(pixels.len(), width as usize * height as usize * 4);
+        unsafe {
+            self.table.get::<SetRawFn>(overlay::SET_RAW)(
+                handle,
+                pixels.as_ptr().cast_mut().cast(),
+                width,
+                height,
+                4,
+            )
+        }
+    }
+
+    pub fn is_visible(&self, handle: OverlayHandle) -> bool {
+        unsafe { self.table.get::<IsVisibleFn>(overlay::IS_VISIBLE)(handle) }
+    }
+
+    pub fn poll(&self, handle: OverlayHandle, event: &mut Event) -> bool {
+        let size = std::mem::size_of::<Event>() as u32;
+        unsafe { self.table.get::<PollOverlayFn>(overlay::POLL_EVENT)(handle, event, size) }
+    }
+
+    pub fn destroy(&self, handle: OverlayHandle) -> i32 {
+        unsafe { self.table.get::<DestroyFn>(overlay::DESTROY)(handle) }
+    }
+}
+
+impl System<'_> {
+    pub fn poll(&self, event: &mut Event) -> bool {
+        let size = std::mem::size_of::<Event>() as u32;
+        unsafe { self.table.get::<PollSystemFn>(system::POLL_EVENT)(event, size) }
+    }
+
+    pub fn ack_quit(&self) {
+        unsafe { self.table.get::<AckQuitFn>(system::ACK_QUIT)() }
+    }
+}
 
 pub fn runtime_dirs(vrpath: &str) -> Vec<PathBuf> {
     serde_json::from_str::<serde_json::Value>(vrpath)
