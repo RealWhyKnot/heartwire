@@ -278,3 +278,56 @@ fn osc_follows_a_new_target() {
     assert_eq!(decode(&buf[..n]).1, Arg::Float(0.25));
     engine.finish();
 }
+
+#[test]
+fn a_post_to_the_http_source_reaches_vrchat_then_times_out() {
+    use std::io::{Read, Write};
+    use std::net::{TcpListener, TcpStream};
+
+    let vrchat = UdpSocket::bind("127.0.0.1:0").unwrap();
+    vrchat
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    let port = TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let engine = Running::start(Config {
+        service_type: Service::Http,
+        http_server_port: port,
+        osc_client_port: vrchat.local_addr().unwrap().port(),
+        connected_timeout: 1,
+        max_heart_rate: 200,
+        ..Config::default()
+    });
+    let mut reply = String::new();
+    for _ in 0..100 {
+        if let Ok(mut stream) = TcpStream::connect(("127.0.0.1", port)) {
+            stream
+                .write_all(b"POST / HTTP/1.1\r\nContent-Length: 3\r\n\r\n150")
+                .unwrap();
+            stream.read_to_string(&mut reply).unwrap();
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(reply.starts_with("HTTP/1.1 200 OK"), "{reply}");
+    let mut buf = [0u8; 128];
+    let mut packets = Vec::new();
+    for _ in 0..3 {
+        let n = vrchat.recv(&mut buf).unwrap();
+        packets.push(decode(&buf[..n]));
+    }
+    assert_eq!(
+        packets,
+        [
+            ("/avatar/parameters/hr_percent".into(), Arg::Float(0.75)),
+            ("/avatar/parameters/hr_connected".into(), Arg::Bool(true)),
+            ("/avatar/parameters/hr_connected".into(), Arg::Bool(false)),
+        ]
+    );
+    let views = engine.finish();
+    assert!(views.iter().any(|v| v.connected && v.bpm == 150));
+    assert!(!views.last().unwrap().connected);
+}
