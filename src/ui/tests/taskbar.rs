@@ -26,6 +26,19 @@ fn taskbar_icon_beats_with_the_heart_rate() {
 }
 
 #[test]
+fn both_taskbar_frames_are_64_px() {
+    let app = app();
+    let still = app.get_taskbar_icon();
+    app.set_beat(true);
+    let beating = app.get_taskbar_icon();
+    assert!(still != beating, "the beat swaps the image");
+    for icon in [still, beating] {
+        let size = icon.size();
+        assert_eq!((size.width, size.height), (64, 64));
+    }
+}
+
+#[test]
 fn beat_frame_keeps_the_window_layout() {
     let app = app();
     let still = render(&app);

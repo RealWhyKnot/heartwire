@@ -16,7 +16,8 @@ export component AppWindow inherits Window {
     in property <bool> beat;
     in property <bool> on-screen: true;
     title: "Heartwire";
-    icon: root.beat ? @image-url("../assets/icon-beat.png") : @image-url("../assets/icon.png");
+    out property <image> taskbar-icon: root.beat ? @image-url("../assets/taskbar-beat.png") : @image-url("../assets/taskbar.png");
+    icon: root.taskbar-icon;
     width: 325px;
     height: 250px;
     background: Theme.gray-900;
