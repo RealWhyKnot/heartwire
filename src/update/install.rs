@@ -1,48 +1,36 @@
 use std::path::Path;
 use std::process::Command;
 
+use super::Package;
+
+fn ps_text(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "''"))
+}
+
 fn ps_quote(value: &Path) -> String {
-    format!("'{}'", value.display().to_string().replace('\'', "''"))
+    ps_text(&value.display().to_string())
 }
 
 fn sh_quote(value: &Path) -> String {
     format!("'{}'", value.display().to_string().replace('\'', "'\\''"))
 }
 
-pub fn powershell_script(
+fn powershell_helper(
     pid: u32,
-    archive: &Path,
+    body: Vec<String>,
     staging: &Path,
     install: &Path,
     exe: &Path,
     log: &Path,
 ) -> String {
-    let extracted = staging.join("extracted");
-    [
+    let mut lines = vec![
         "$ErrorActionPreference = 'Stop'".to_owned(),
         "$applied = $false".into(),
         "try {".into(),
         format!("    Wait-Process -Id {pid} -Timeout 120 -ErrorAction SilentlyContinue"),
-        format!(
-            "    Expand-Archive -LiteralPath {} -DestinationPath {} -Force",
-            ps_quote(archive),
-            ps_quote(&extracted)
-        ),
-        "    $attempt = 0".into(),
-        "    while ($true) {".into(),
-        "        try {".into(),
-        format!(
-            "            Copy-Item -Path (Join-Path {} '*') -Destination {} -Recurse -Force",
-            ps_quote(&extracted),
-            ps_quote(install)
-        ),
-        "            break".into(),
-        "        } catch {".into(),
-        "            $attempt++".into(),
-        "            if ($attempt -ge 10) { throw }".into(),
-        "            Start-Sleep -Seconds 1".into(),
-        "        }".into(),
-        "    }".into(),
+    ];
+    lines.extend(body);
+    lines.extend([
         "    $applied = $true".into(),
         "} catch {".into(),
         format!(
@@ -71,9 +59,62 @@ pub fn powershell_script(
             ps_quote(staging)
         ),
         "if (-not $applied) { exit 1 }".into(),
-    ]
-    .join("\r\n")
-        + "\r\n"
+    ]);
+    lines.join("\r\n") + "\r\n"
+}
+
+pub fn powershell_script(
+    pid: u32,
+    archive: &Path,
+    staging: &Path,
+    install: &Path,
+    exe: &Path,
+    log: &Path,
+) -> String {
+    let extracted = staging.join("extracted");
+    let body = vec![
+        format!(
+            "    Expand-Archive -LiteralPath {} -DestinationPath {} -Force",
+            ps_quote(archive),
+            ps_quote(&extracted)
+        ),
+        "    $attempt = 0".into(),
+        "    while ($true) {".into(),
+        "        try {".into(),
+        format!(
+            "            Copy-Item -Path (Join-Path {} '*') -Destination {} -Recurse -Force",
+            ps_quote(&extracted),
+            ps_quote(install)
+        ),
+        "            break".into(),
+        "        } catch {".into(),
+        "            $attempt++".into(),
+        "            if ($attempt -ge 10) { throw }".into(),
+        "            Start-Sleep -Seconds 1".into(),
+        "        }".into(),
+        "    }".into(),
+    ];
+    powershell_helper(pid, body, staging, install, exe, log)
+}
+
+pub fn setup_script(
+    pid: u32,
+    setup: &Path,
+    staging: &Path,
+    install: &Path,
+    exe: &Path,
+    log: &Path,
+) -> String {
+    let body = vec![
+        format!(
+            "    $setup = Start-Process -FilePath {} -ArgumentList {} -Wait -PassThru",
+            ps_quote(setup),
+            ps_text(&format!("/S /D={}", install.display()))
+        ),
+        "    if ($setup.ExitCode -ne 0) { throw \"setup exited with code $($setup.ExitCode)\" }"
+            .into(),
+    ];
+    powershell_helper(pid, body, staging, install, exe, log)
 }
 
 pub fn sh_script(
@@ -113,15 +154,25 @@ pub fn sh_script(
         + "\n"
 }
 
-pub fn apply(archive: &Path, staging: &Path, log: &Path) -> Result<(), String> {
+pub fn apply(package: Package, file: &Path, staging: &Path, log: &Path) -> Result<(), String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let install = exe.parent().ok_or("no install folder")?.to_path_buf();
-    launch_helper(std::process::id(), archive, staging, &install, &exe, log).map(|_| ())
+    launch_helper(
+        std::process::id(),
+        package,
+        file,
+        staging,
+        &install,
+        &exe,
+        log,
+    )
+    .map(|_| ())
 }
 
 fn launch_helper(
     pid: u32,
-    archive: &Path,
+    package: Package,
+    file: &Path,
     staging: &Path,
     install: &Path,
     exe: &Path,
@@ -129,11 +180,11 @@ fn launch_helper(
 ) -> Result<std::process::Child, String> {
     let mut command = if cfg!(windows) {
         let script = staging.join("apply.ps1");
-        std::fs::write(
-            &script,
-            powershell_script(pid, archive, staging, install, exe, log),
-        )
-        .map_err(|e| e.to_string())?;
+        let text = match package {
+            Package::Archive => powershell_script(pid, file, staging, install, exe, log),
+            Package::Setup => setup_script(pid, file, staging, install, exe, log),
+        };
+        std::fs::write(&script, text).map_err(|e| e.to_string())?;
         let mut c = Command::new("powershell.exe");
         c.args([
             "-NoProfile",
@@ -147,7 +198,7 @@ fn launch_helper(
         c
     } else {
         let script = staging.join("apply.sh");
-        std::fs::write(&script, sh_script(pid, archive, staging, install, exe, log))
+        std::fs::write(&script, sh_script(pid, file, staging, install, exe, log))
             .map_err(|e| e.to_string())?;
         let mut c = Command::new("/bin/sh");
         c.arg(&script);
@@ -191,6 +242,76 @@ mod tests {
         );
         assert!(sh.contains("archive='C:/it'\\''s here/app.zip'"));
         assert!(sh.starts_with("#!/bin/sh\n"));
+        let setup = setup_script(
+            42,
+            Path::new("C:/s/heartwire-setup.exe"),
+            Path::new("C:/s"),
+            Path::new("C:/it's here"),
+            Path::new("C:/it's here/heartwire.exe"),
+            Path::new("C:/l.log"),
+        );
+        assert!(setup.contains("-ArgumentList '/S /D=C:/it''s here' -Wait -PassThru"));
+        assert!(setup.contains("Start-Process -FilePath 'C:/it''s here/heartwire.exe'"));
+    }
+
+    #[cfg(windows)]
+    fn run_setup(root: &Path, exit_code: u8) -> (bool, PathBuf, PathBuf) {
+        let staging = root.join("staging");
+        let install = root.join("install dir");
+        for dir in [&staging, &install] {
+            std::fs::create_dir_all(dir).unwrap();
+        }
+        let setup = staging.join("setup.cmd");
+        let args = root.join("args.txt");
+        std::fs::write(
+            &setup,
+            format!(
+                "@echo %*> \"{}\"\r\n@exit /b {exit_code}\r\n",
+                args.display()
+            ),
+        )
+        .unwrap();
+        let log = root.join("update.log");
+        let exe = PathBuf::from(r"C:\Windows\System32\rundll32.exe");
+        let mut child = launch_helper(
+            2_147_483_000,
+            Package::Setup,
+            &setup,
+            &staging,
+            &install,
+            &exe,
+            &log,
+        )
+        .unwrap();
+        let ok = child.wait().unwrap().success();
+        assert!(!staging.exists(), "the staging folder is removed");
+        (ok, install, log)
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn helper_runs_the_setup_silently_into_the_install_folder() {
+        let root = scratch("setup");
+        let (ok, install, log) = run_setup(&root, 0);
+        assert!(ok, "{:?}", std::fs::read_to_string(&log));
+        assert_eq!(
+            std::fs::read_to_string(root.join("args.txt"))
+                .unwrap()
+                .trim(),
+            format!("/S /D={}", install.display())
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn helper_logs_a_failed_setup() {
+        let root = scratch("setup-failed");
+        let (ok, _, log) = run_setup(&root, 5);
+        assert!(!ok);
+        let text = std::fs::read_to_string(&log).unwrap();
+        assert!(text.contains("setup exited with code 5"), "{text}");
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
@@ -231,8 +352,16 @@ mod tests {
             (archive, PathBuf::from("/usr/bin/true"))
         };
         let log = root.join("update.log");
-        let mut child =
-            launch_helper(2_147_483_000, &archive, &staging, &install, &exe, &log).unwrap();
+        let mut child = launch_helper(
+            2_147_483_000,
+            Package::Archive,
+            &archive,
+            &staging,
+            &install,
+            &exe,
+            &log,
+        )
+        .unwrap();
         assert!(
             child.wait().unwrap().success(),
             "{:?}",

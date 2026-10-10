@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
 
-use super::{Release, agent, archive_name, asset_url, integrity_name};
+use super::{Package, Release, agent, asset_url};
 
 pub fn parse_integrity(tsv: &str, archive: &str) -> Result<(String, u64), String> {
     let line = tsv
@@ -37,11 +37,12 @@ pub fn parse_integrity(tsv: &str, archive: &str) -> Result<(String, u64), String
 
 pub fn download(
     release: &Release,
+    package: Package,
     staging: &Path,
     progress: &dyn Fn(f32),
 ) -> Result<PathBuf, String> {
-    let archive = archive_name(&release.tag_name);
-    let integrity = integrity_name(&release.tag_name);
+    let archive = package.asset(&release.tag_name);
+    let integrity = package.integrity(&release.tag_name);
     let agent = agent();
     let tsv = agent
         .get(asset_url(release, &integrity)?)
@@ -115,8 +116,8 @@ mod tests {
             .expect("the releases API answers")
             .expect("a release with assets for this platform");
         let staging = scratch("download");
-        let archive =
-            download(&release, &staging, &|_| {}).expect("download passes the integrity check");
+        let archive = download(&release, Package::Archive, &staging, &|_| {})
+            .expect("download passes the integrity check");
         assert!(archive.metadata().unwrap().len() > 100_000);
         let _ = std::fs::remove_dir_all(&staging);
     }

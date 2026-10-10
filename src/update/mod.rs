@@ -1,6 +1,7 @@
 mod download;
 mod install;
 
+use std::path::Path;
 use std::time::Duration;
 
 use serde::Deserialize;
@@ -12,6 +13,8 @@ pub use install::apply;
 
 const RELEASES_URL: &str =
     "https://api.github.com/repos/RealWhyKnot/heartwire/releases?per_page=20";
+
+const UNINSTALLER: &str = "Uninstall.exe";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct AppVersion {
@@ -91,13 +94,39 @@ fn base_name(tag: &str) -> String {
     format!("heartwire-{version}-{}", rid())
 }
 
-pub fn archive_name(tag: &str) -> String {
-    let ext = if cfg!(windows) { "zip" } else { "tar.gz" };
-    format!("{}.{ext}", base_name(tag))
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Package {
+    Archive,
+    Setup,
 }
 
-pub fn integrity_name(tag: &str) -> String {
-    format!("{}.integrity.tsv", base_name(tag))
+impl Package {
+    pub fn current() -> Package {
+        let exe = std::env::current_exe().ok();
+        Package::for_folder(exe.as_deref().and_then(Path::parent))
+    }
+
+    fn for_folder(dir: Option<&Path>) -> Package {
+        match dir {
+            Some(dir) if cfg!(windows) && dir.join(UNINSTALLER).is_file() => Package::Setup,
+            _ => Package::Archive,
+        }
+    }
+
+    pub fn asset(self, tag: &str) -> String {
+        match self {
+            Package::Archive if cfg!(windows) => format!("{}.zip", base_name(tag)),
+            Package::Archive => format!("{}.tar.gz", base_name(tag)),
+            Package::Setup => format!("{}-setup.exe", base_name(tag)),
+        }
+    }
+
+    pub fn integrity(self, tag: &str) -> String {
+        match self {
+            Package::Archive => format!("{}.integrity.tsv", base_name(tag)),
+            Package::Setup => format!("{}-setup.integrity.tsv", base_name(tag)),
+        }
+    }
 }
 
 fn agent() -> ureq::Agent {
@@ -125,10 +154,12 @@ pub fn check(current: &str, channel: Channel) -> Result<Option<Release>, String>
     let Some(release) = select(&releases, current, channel) else {
         return Ok(None);
     };
-    let archive = archive_name(&release.tag_name);
-    let integrity = integrity_name(&release.tag_name);
-    let has = |n: &str| release.assets.iter().any(|a| a.name == n);
-    Ok((has(&archive) && has(&integrity)).then(|| release.clone()))
+    let package = Package::current();
+    let has = |n: String| release.assets.iter().any(|a| a.name == n);
+    Ok(
+        (has(package.asset(&release.tag_name)) && has(package.integrity(&release.tag_name)))
+            .then(|| release.clone()),
+    )
 }
 
 fn asset_url<'a>(release: &'a Release, name: &str) -> Result<&'a str, String> {
@@ -208,12 +239,35 @@ mod tests {
 
     #[test]
     fn asset_names_follow_the_rid() {
-        let name = archive_name("v2026.10.9.0");
+        let name = Package::Archive.asset("v2026.10.9.0");
         assert!(name.starts_with("heartwire-2026.10.9.0-"));
         assert!(name.ends_with(if cfg!(windows) { ".zip" } else { ".tar.gz" }));
         assert_eq!(
-            integrity_name("v2026.10.9.0-beta"),
+            Package::Archive.integrity("v2026.10.9.0-beta"),
             format!("heartwire-2026.10.9.0-beta-{}.integrity.tsv", rid())
         );
+        assert_eq!(
+            Package::Setup.asset("v2026.10.9.0"),
+            format!("heartwire-2026.10.9.0-{}-setup.exe", rid())
+        );
+        assert_eq!(
+            Package::Setup.integrity("v2026.10.9.0-beta"),
+            format!("heartwire-2026.10.9.0-beta-{}-setup.integrity.tsv", rid())
+        );
+    }
+
+    #[test]
+    fn an_uninstaller_beside_the_exe_means_the_setup_updates_it() {
+        let dir = testing::scratch("package");
+        assert_eq!(Package::for_folder(Some(&dir)), Package::Archive);
+        assert_eq!(Package::for_folder(None), Package::Archive);
+        std::fs::write(dir.join(UNINSTALLER), b"").unwrap();
+        let expected = if cfg!(windows) {
+            Package::Setup
+        } else {
+            Package::Archive
+        };
+        assert_eq!(Package::for_folder(Some(&dir)), expected);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

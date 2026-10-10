@@ -67,8 +67,9 @@ fn install(window: &AppWindow, pending: &Pending, staging: PathBuf, log_path: Pa
                     });
                 }
             };
-            match update::download(&release, &staging, &progress)
-                .and_then(|archive| update::apply(&archive, &staging, &log_path))
+            let package = update::Package::current();
+            match update::download(&release, package, &staging, &progress)
+                .and_then(|file| update::apply(package, &file, &staging, &log_path))
             {
                 Ok(()) => {
                     log::write(&format!("installing {}", release.tag_name));
