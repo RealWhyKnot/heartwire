@@ -16,10 +16,11 @@ subject that isn't a conventional commit.
 
 | Path | What it does |
 |---|---|
-| `src/app/` | Start-up, single instance, and the glue between the engine and the window |
-| `src/engine.rs` | Turns readings into OSC and decides when the connection has dropped |
-| `src/sources/` | One module per heart rate source: `auto`, `ble`, `http`, `pico`, `pulsoid` |
-| `src/steamvr/` | Loading SteamVR's OpenVR library, registration, the dashboard panel |
+| `src/app/` | Start-up, single instance, and the glue between the engine and the window. `state.rs` holds what the UI thread owns |
+| `src/engine/` | Turns readings into OSC and decides when the connection has dropped |
+| `src/sources/` | One module per heart rate source: `auto`, `ble`, `http`, `pico`, `pulsoid`. `context.rs` is how a source reports and how it's stopped |
+| `src/steamvr/` | SteamVR start-up registration and the dashboard panel. Every unsafe OpenVR call is in `openvr.rs` |
+| `src/perf/` | The performance suite behind `--perf` |
 | `src/update/` | Finding a newer release, the verified download, the install helper |
 | `src/config/` | Settings file, defaults, and the one-time import from hr-osc |
 | `src/platform/` | Start at login and opening links, per operating system |
@@ -42,6 +43,23 @@ cargo test
 ```
 
 The tests don't need a strap, a Pico or Bluetooth hardware.
+
+A few tests are ignored by default because they need something this list doesn't
+cover: SteamVR installed and closed, a Pico plugged in, the network, or a desktop
+with a visible taskbar. `tests/taskbar_beat.rs` is the last kind. It runs the app
+minimized with a fake 120 bpm feed and a Start menu shortcut pointing at it, then
+watches the taskbar pixels for the beat:
+
+```bash
+cargo test --release --test taskbar_beat -- --ignored --nocapture
+```
+
+## Performance
+
+`heartwire --perf report.txt` times every part of the app: parsing, OSC, the
+engine, each source, settings, update checks, platform probes and the window
+and dashboard rendering. Each case has a budget and the report marks any that go
+over. Run it on a release build. Debug numbers are several times slower.
 
 ## Commits
 
