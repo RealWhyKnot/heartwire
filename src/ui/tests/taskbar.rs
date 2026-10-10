@@ -40,3 +40,36 @@ fn beat_frame_keeps_the_window_layout() {
         "the beat only changes the taskbar icon"
     );
 }
+
+fn same(a: &Frame, b: &Frame) -> bool {
+    a.pixels
+        .iter()
+        .zip(&b.pixels)
+        .all(|(p, q)| (p.red, p.green, p.blue) == (q.red, q.green, q.blue))
+}
+
+#[test]
+fn the_ping_animates_on_screen_and_stops_off_screen() {
+    let app = app();
+    app.global::<HeartRate>().set_connected(true);
+    app.global::<HeartRate>().set_bpm(72);
+    advance(0);
+    let first = render(&app);
+    advance(200);
+    let later = render(&app);
+    assert!(
+        !same(&first, &later),
+        "the ping moves while the window is shown"
+    );
+    app.set_on_screen(false);
+    advance(400);
+    let hidden = render(&app);
+    advance(800);
+    assert!(
+        same(&hidden, &render(&app)),
+        "nothing moves while the window is minimized"
+    );
+    app.set_on_screen(true);
+    advance(1000);
+    assert!(!same(&hidden, &render(&app)), "the ping resumes on restore");
+}
