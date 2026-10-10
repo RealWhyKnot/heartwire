@@ -21,9 +21,7 @@ pub fn usable(m: Measurement) -> Option<u16> {
     (m.contact != Some(false) && (1..=MAX_BPM).contains(&m.bpm)).then_some(m.bpm)
 }
 
-pub fn parse_bpm_text(text: &str) -> Option<u16> {
-    let text = text.trim();
-    let value: f64 = text.parse().ok()?;
+pub fn bpm_from_f64(value: f64) -> Option<u16> {
     if !value.is_finite() {
         return None;
     }
@@ -31,6 +29,10 @@ pub fn parse_bpm_text(text: &str) -> Option<u16> {
     (1.0..=f64::from(MAX_BPM))
         .contains(&bpm)
         .then_some(bpm as u16)
+}
+
+pub fn parse_bpm_text(text: &str) -> Option<u16> {
+    bpm_from_f64(text.trim().parse().ok()?)
 }
 
 #[cfg(test)]
@@ -91,5 +93,15 @@ mod tests {
         assert_eq!(parse_bpm_text("abc"), None);
         assert_eq!(parse_bpm_text("NaN"), None);
         assert_eq!(parse_bpm_text(""), None);
+    }
+
+    #[test]
+    fn bpm_numbers() {
+        assert_eq!(bpm_from_f64(71.5), Some(72));
+        assert_eq!(bpm_from_f64(0.4), None);
+        assert_eq!(bpm_from_f64(300.4), Some(300));
+        assert_eq!(bpm_from_f64(300.5), None);
+        assert_eq!(bpm_from_f64(f64::INFINITY), None);
+        assert_eq!(bpm_from_f64(-72.0), None);
     }
 }

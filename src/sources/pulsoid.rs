@@ -1,4 +1,4 @@
-use std::net::TcpStream;
+use std::net::{TcpStream, ToSocketAddrs};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde_json::Value;
@@ -10,6 +10,7 @@ use crate::heart_rate;
 const RPC_URL: &str = "https://api.stromno.com/v1/api/public/rpc";
 const RETRY: Duration = Duration::from_secs(5);
 const SILENCE: Duration = Duration::from_secs(90);
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub fn run(ctx: &Context, widget: &str) {
     if widget.is_empty() {
@@ -70,7 +71,21 @@ pub fn bpm_from_message(message: &str) -> Option<u16> {
     let bpm = rate
         .as_f64()
         .or_else(|| rate.as_str()?.trim().parse().ok())?;
-    heart_rate::parse_bpm_text(&bpm.to_string())
+    heart_rate::bpm_from_f64(bpm)
+}
+
+fn connect(ctx: &Context, host: &str, port: u16) -> std::io::Result<TcpStream> {
+    let mut last = std::io::Error::from(std::io::ErrorKind::NotFound);
+    for addr in (host, port).to_socket_addrs()? {
+        if ctx.stopped() {
+            break;
+        }
+        match TcpStream::connect_timeout(&addr, CONNECT_TIMEOUT) {
+            Ok(tcp) => return Ok(tcp),
+            Err(error) => last = error,
+        }
+    }
+    Err(last)
 }
 
 fn listen(ctx: &Context, url: &str) {
@@ -80,11 +95,13 @@ fn listen(ctx: &Context, url: &str) {
     };
     let host = request.uri().host().unwrap_or_default().to_owned();
     let port = request.uri().port_u16().unwrap_or(443);
-    let tcp = match TcpStream::connect((host.as_str(), port)) {
+    let tcp = match connect(ctx, &host, port) {
         Ok(tcp) => tcp,
         Err(error) => {
-            crate::log::write(&format!("pulsoid connect: {error}"));
-            ctx.status("Can't reach Pulsoid, retrying");
+            if !ctx.stopped() {
+                crate::log::write(&format!("pulsoid connect: {error}"));
+                ctx.status("Can't reach Pulsoid, retrying");
+            }
             return;
         }
     };
