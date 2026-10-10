@@ -50,6 +50,11 @@ function Add-RuntimeFiles([string] $Dir) {
   }
 }
 
+function Write-Text([string] $Path, [string] $Text) {
+  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Path) | Out-Null
+  [System.IO.File]::WriteAllText($Path, $Text, (New-Object System.Text.UTF8Encoding($false)))
+}
+
 function Invoke-Uninstall([string] $Dir) {
   $code = Invoke-Exe (Join-Path $Dir 'Uninstall.exe') "/S _?=$Dir"
   Assert ("$code" -eq '0') "uninstaller exit code 0 (got $code)"
@@ -128,11 +133,21 @@ if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -For
 $keptSeed = Join-Path $dataDir 'setup-smoke.txt'
 $stagingSeed = Join-Path $dataDir 'update\setup-smoke.bin'
 $createdData = -not (Test-Path -LiteralPath $dataDir)
+$realRoaming = $env:APPDATA
+$realLocal = $env:LOCALAPPDATA
+$fakeRoaming = Join-Path $root 'profile\Roaming'
+$fakeLocal = Join-Path $root 'profile\Local'
+$fakeSettings = Join-Path $fakeRoaming 'heartwire\config.json'
 
 try {
+  New-Item -ItemType Directory -Force -Path $fakeRoaming, $fakeLocal | Out-Null
+  $env:APPDATA = $fakeRoaming
+  $env:LOCALAPPDATA = $fakeLocal
+
   $code = Invoke-Exe $setupPath "/S /D=$first"
   Assert ("$code" -eq '0') "fresh install exit code 0 (got $code)"
   Assert-Installed $first
+  Assert (-not (Test-Path -LiteralPath (Split-Path -Parent $fakeSettings))) "a fresh install creates no settings folder"
 
   Add-RuntimeFiles $first
   Set-RunValue (Join-Path $first 'heartwire.exe')
@@ -157,6 +172,21 @@ try {
   $code = Invoke-Exe $setupPath "/S /D=$second"
   Assert ("$code" -eq '0') "install after uninstall exit code 0 (got $code)"
   Assert-Installed $second
+
+  $manifest = Join-Path $second 'heartwire.vrmanifest'
+  $steamConfig = Join-Path $root 'profile\Steam\config'
+  Write-Text $fakeSettings '{"steamvr_autostart": true, "steamvr_registered": false, "osc_client_port": 9123}'
+  Write-Text (Join-Path $fakeLocal 'openvr\openvrpaths.vrpath') (ConvertTo-Json @{ config = @($steamConfig); runtime = @(); version = 1 })
+  Write-Text (Join-Path $steamConfig 'appconfig.json') (ConvertTo-Json @{ manifest_paths = @($manifest) })
+  $code = Invoke-Exe $setupPath "/S /D=$second"
+  Assert ("$code" -eq '0') "reinstall with start with SteamVR on exit code 0 (got $code)"
+  Assert (Test-Path -LiteralPath $manifest) "setup wrote the SteamVR manifest beside the exe"
+  $settings = Get-Content -LiteralPath $fakeSettings -Raw | ConvertFrom-Json
+  Assert ($settings.steamvr_registered -eq $true) "setup recorded the existing SteamVR registration (got $($settings.steamvr_registered))"
+  Assert ($settings.steamvr_autostart -eq $true -and $settings.osc_client_port -eq 9123) "setup kept the other settings"
+  $code = Invoke-Exe (Join-Path $second 'heartwire.exe') '--unregister-steamvr' 60
+  Assert ("$code" -eq '3') "--unregister-steamvr exits 3 when SteamVR can't be loaded instead of opening the app (got $code)"
+
   Add-RuntimeFiles $second
   Set-RunValue (Join-Path $second 'heartwire.exe')
   foreach ($seed in @($keptSeed, $stagingSeed)) {
@@ -168,6 +198,8 @@ try {
   Assert (-not (Test-Path -LiteralPath (Split-Path -Parent $stagingSeed))) "uninstall removed the update staging folder"
 }
 finally {
+  $env:APPDATA = $realRoaming
+  $env:LOCALAPPDATA = $realLocal
   if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force }
   if (Test-Path -LiteralPath $keptSeed) { Remove-Item -LiteralPath $keptSeed -Force }
   if (Test-Path -LiteralPath $stagingSeed) { Remove-Item -LiteralPath (Split-Path -Parent $stagingSeed) -Recurse -Force }

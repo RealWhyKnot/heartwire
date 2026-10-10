@@ -16,7 +16,8 @@ hr-bridge-pico: both jobs now happen inside the app.
 On Windows, download `heartwire-<version>-win-x64-setup.exe` from
 [Releases](https://github.com/RealWhyKnot/heartwire/releases) and run it. It
 installs for your account only and doesn't need admin rights. Uninstall it from
-Settings > Apps > Installed apps. The uninstaller asks before deleting your settings.
+Settings > Apps > Installed apps, which also takes it off SteamVR's app list.
+The uninstaller asks before deleting your settings.
 
 For a portable copy, or on Linux and macOS, download the archive for your system,
 unpack it anywhere and run `heartwire.exe` (or `heartwire`).

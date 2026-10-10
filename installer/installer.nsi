@@ -103,9 +103,23 @@ Section "Install"
 	WriteRegDWORD HKCU "${ARPKEY}" "NoRepair" 1
 	${GetSize} "$INSTDIR" "/S=0K" $0 $1 $2
 	WriteRegDWORD HKCU "${ARPKEY}" "EstimatedSize" $0
+
+	nsExec::ExecToLog /TIMEOUT=60000 '"$INSTDIR\${EXENAME}" --register-steamvr'
+	Pop $0
+	${If} $0 != "0"
+	${AndIf} $0 != "3"
+		DetailPrint "Adding Heartwire to SteamVR didn't finish ($0). It adds itself the next time it runs with SteamVR open."
+	${EndIf}
 SectionEnd
 
 Section "Uninstall"
+	DetailPrint "Removing Heartwire from SteamVR..."
+	nsExec::ExecToLog /TIMEOUT=60000 '"$INSTDIR\${EXENAME}" --unregister-steamvr'
+	Pop $0
+	${If} $0 != "0"
+		DetailPrint "Removing Heartwire from SteamVR didn't finish ($0)."
+	${EndIf}
+
 	ReadRegStr $0 HKCU "${RUNKEY}" "${APPNAME}"
 	${If} $0 == '"$INSTDIR\${EXENAME}" --minimized'
 		DeleteRegValue HKCU "${RUNKEY}" "${APPNAME}"
