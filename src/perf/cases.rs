@@ -156,6 +156,7 @@ fn devices() -> Vec<Device> {
 }
 
 pub fn all() -> Vec<Case> {
+    #[cfg_attr(not(windows), allow(unused_mut))]
     let mut cases = vec![
         Case::new("core", "parse a BLE heart rate packet", 100 * NS, || {
             black_box(

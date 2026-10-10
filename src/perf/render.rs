@@ -190,6 +190,7 @@ pub fn timings(settings: Settings) -> Vec<Timing> {
     let window = std::thread::spawn(move || window_timings(settings));
     #[cfg(any(windows, test))]
     let panel = std::thread::spawn(move || panel_timings(settings));
+    #[cfg_attr(not(any(windows, test)), allow(unused_mut))]
     let mut out = window.join().unwrap_or_default();
     #[cfg(any(windows, test))]
     out.extend(panel.join().unwrap_or_default());

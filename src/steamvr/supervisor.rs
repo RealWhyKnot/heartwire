@@ -13,6 +13,7 @@ const IDLE: Duration = Duration::from_secs(3600);
 pub enum SessionEnd {
     SteamVrQuit,
     AppQuit,
+    #[cfg_attr(not(windows), allow(dead_code))]
     Unregistered,
 }
 
