@@ -80,6 +80,7 @@ pub fn run() {
     if register || has_flag(steamvr::UNREGISTER_FLAG) {
         if dir.is_dir() {
             log::init(&dir);
+            log::catch_panics();
         }
         std::process::exit(steamvr::setup_command(register, &dir));
     }
@@ -92,6 +93,7 @@ pub fn run() {
         return;
     };
     log::init(&dir);
+    log::catch_panics();
     platform::claim_app_id();
     log::write(&format!(
         "Heartwire {} ({}) {} starting",

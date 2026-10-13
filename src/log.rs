@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Mutex, TryLockError};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const MAX_BYTES: u64 = 512 * 1024;
@@ -63,12 +63,48 @@ pub fn init(dir: &Path) {
     *LOG.lock().unwrap_or_else(|e| e.into_inner()) = Some(Log::open(dir, MAX_BYTES));
 }
 
-pub fn write(message: &str) {
+pub fn catch_panics() {
+    let default = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let thread = std::thread::current();
+        let line = format!(
+            "{} panic in {}: {info}\n",
+            now(),
+            thread.name().unwrap_or("unnamed thread")
+        );
+        last_words(&LOG, &line);
+        default(info);
+    }));
+}
+
+fn last_words(slot: &Mutex<Option<Log>>, line: &str) -> bool {
+    for _ in 0..50 {
+        let mut held = match slot.try_lock() {
+            Ok(held) => held,
+            Err(TryLockError::Poisoned(e)) => e.into_inner(),
+            Err(TryLockError::WouldBlock) => {
+                std::thread::sleep(std::time::Duration::from_millis(2));
+                continue;
+            }
+        };
+        return held.as_mut().is_some_and(|log| {
+            log.line(line);
+            true
+        });
+    }
+    false
+}
+
+fn now() -> String {
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    let line = format!("{} {message}\n", timestamp(secs));
+    timestamp(secs)
+}
+
+pub fn write(message: &str) {
+    let line = format!("{} {message}\n", now());
     if cfg!(debug_assertions) {
         eprint!("{line}");
     }
@@ -131,6 +167,35 @@ mod tests {
         assert!(!write_changed("pico: no strap found"));
         assert!(write_changed("pico: subscribed"));
         assert!(write_changed("pico: no strap found"));
+    }
+
+    #[test]
+    fn a_panic_reaches_the_log_even_when_the_lock_is_poisoned_or_held() {
+        let dir = std::env::temp_dir().join(format!("heartwire-panic-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let slot = std::sync::Arc::new(Mutex::new(Some(Log::open(&dir, MAX_BYTES))));
+        let poisoner = slot.clone();
+        let _ = std::thread::spawn(move || {
+            let _held = poisoner.lock().unwrap();
+            panic!("poison the log");
+        })
+        .join();
+        assert!(slot.is_poisoned());
+        assert!(last_words(&slot, "first\n"));
+        let busy = slot.clone();
+        let holder = std::thread::spawn(move || {
+            let _held = busy.lock().unwrap_or_else(|e| e.into_inner());
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        });
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        assert!(last_words(&slot, "second\n"));
+        holder.join().unwrap();
+        assert!(!last_words(&Mutex::new(None), "nowhere\n"));
+        drop(slot);
+        let text = std::fs::read_to_string(dir.join("heartwire.log")).unwrap();
+        assert_eq!(text, "first\nsecond\n");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
