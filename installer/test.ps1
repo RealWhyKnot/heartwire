@@ -41,6 +41,7 @@ function Get-RunValue {
 }
 
 function Set-RunValue([string] $Exe) {
+  if (-not (Test-Path $runPath)) { New-Item -Path $runPath -Force | Out-Null }
   New-ItemProperty -Path $runPath -Name 'Heartwire' -Value ('"' + $Exe + '" --minimized') -PropertyType String -Force | Out-Null
 }
 
