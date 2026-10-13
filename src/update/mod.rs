@@ -13,6 +13,7 @@ pub use install::apply;
 
 const RELEASES_URL: &str =
     "https://api.github.com/repos/RealWhyKnot/heartwire/releases?per_page=20";
+const LATEST_URL: &str = "https://api.github.com/repos/RealWhyKnot/heartwire/releases/latest";
 
 const UNINSTALLER: &str = "Uninstall.exe";
 
@@ -140,8 +141,12 @@ pub fn check(current: &str, channel: Channel) -> Result<Option<Release>, String>
     if channel == Channel::Dev {
         return Ok(None);
     }
+    let url = match channel {
+        Channel::Release => LATEST_URL,
+        _ => RELEASES_URL,
+    };
     let text = agent()
-        .get(RELEASES_URL)
+        .get(url)
         .header("Accept", "application/vnd.github+json")
         .call()
         .map_err(|e| e.to_string())?
@@ -150,7 +155,7 @@ pub fn check(current: &str, channel: Channel) -> Result<Option<Release>, String>
         .limit(4 * 1024 * 1024)
         .read_to_string()
         .map_err(|e| e.to_string())?;
-    let releases: Vec<Release> = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+    let releases = parse_releases(&text)?;
     let Some(release) = select(&releases, current, channel) else {
         return Ok(None);
     };
@@ -160,6 +165,15 @@ pub fn check(current: &str, channel: Channel) -> Result<Option<Release>, String>
         (has(package.asset(&release.tag_name)) && has(package.integrity(&release.tag_name)))
             .then(|| release.clone()),
     )
+}
+
+fn parse_releases(text: &str) -> Result<Vec<Release>, String> {
+    let parsed = if text.trim_start().starts_with('[') {
+        serde_json::from_str(text)
+    } else {
+        serde_json::from_str(text).map(|release| vec![release])
+    };
+    parsed.map_err(|e| e.to_string())
 }
 
 fn asset_url<'a>(release: &'a Release, name: &str) -> Result<&'a str, String> {
@@ -227,6 +241,21 @@ mod tests {
         assert!(select(&list, current, Channel::Dev).is_none());
         let newest = AppVersion::parse("v2026.10.12.0").unwrap();
         assert!(select(&list, newest, Channel::Beta).is_none());
+    }
+
+    #[test]
+    fn a_list_and_the_latest_release_both_parse() {
+        let many = parse_releases(
+            r#"[{"tag_name":"v2026.10.12.0-beta","prerelease":true},{"tag_name":"v2026.10.11.0"}]"#,
+        )
+        .unwrap();
+        assert_eq!(many.len(), 2);
+        assert!(many[0].prerelease);
+        let one = parse_releases(r#"{"tag_name":"v2026.10.11.0","draft":false,"prerelease":false,"assets":[{"name":"a.zip","browser_download_url":"https://x/a.zip"}]}"#).unwrap();
+        assert_eq!(one.len(), 1);
+        assert_eq!(one[0].tag_name, "v2026.10.11.0");
+        assert_eq!(one[0].assets[0].name, "a.zip");
+        assert!(parse_releases(r#"{"message":"Not Found"}"#).is_err());
     }
 
     #[test]
