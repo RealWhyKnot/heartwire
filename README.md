@@ -139,7 +139,8 @@ cargo test
 
 Releases are tagged `vYYYY.M.D.N`. Pushing a tag builds Windows, Linux and macOS
 archives and publishes them. A nightly job tags a `-beta` when main has a new
-feature or fix since the last tag, and beta builds update to newer betas.
+feature or fix since the last tag. Beta builds update to whichever release is
+newest, beta or not. Stable builds only update to other stable releases.
 
 ## License
 
