@@ -129,6 +129,9 @@ impl Config {
         if self.connected_timeout == 0 {
             self.connected_timeout = d.connected_timeout;
         }
+        if self.bluetooth_device.trim() == "00:00:00:00:00:00" {
+            self.bluetooth_device = d.bluetooth_device;
+        }
     }
 
     pub fn set(&mut self, key: &str, value: &str) -> bool {
@@ -239,6 +242,14 @@ mod tests {
             Config::from_json(r#"{"max_heart_rate":0}"#).max_heart_rate,
             200
         );
+    }
+
+    #[test]
+    fn a_blank_bluetooth_address_is_not_a_pin() {
+        let c = Config::from_json(r#"{"bluetooth_device":" 00:00:00:00:00:00 "}"#);
+        assert_eq!(c.bluetooth_device, "");
+        let c = Config::from_json(r#"{"bluetooth_device":"C0:FF:EE:00:11:22"}"#);
+        assert_eq!(c.bluetooth_device, "C0:FF:EE:00:11:22");
     }
 
     #[test]

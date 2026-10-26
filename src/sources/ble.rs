@@ -2,7 +2,7 @@ use std::future::Future;
 use std::time::{Duration, Instant};
 
 use btleplug::api::bleuuid::uuid_from_u16;
-use btleplug::api::{Central, CentralEvent, Manager as _, Peripheral as _, ScanFilter};
+use btleplug::api::{BDAddr, Central, CentralEvent, Manager as _, Peripheral as _, ScanFilter};
 use btleplug::platform::{Adapter, Manager, Peripheral};
 use futures::StreamExt;
 use uuid::Uuid;
@@ -76,6 +76,14 @@ async fn session(ctx: &Context, wanted: &str, interrupt: &mut dyn FnMut() -> boo
     }
 }
 
+fn identity(address: BDAddr, id: impl std::fmt::Display) -> String {
+    if address == BDAddr::default() {
+        id.to_string()
+    } else {
+        address.to_string()
+    }
+}
+
 pub fn matches(device: &Device, wanted: &str) -> bool {
     let wanted = wanted.trim();
     wanted.is_empty()
@@ -111,7 +119,7 @@ async fn find(
             };
             let device = Device {
                 name: props.local_name.unwrap_or_default(),
-                address: props.address.to_string(),
+                address: identity(props.address, peripheral.id()),
             };
             let heart_rate = wanted.is_empty() || props.services.contains(&HR_SERVICE);
             if !heart_rate && !(matches(&device, wanted) && !device.name.is_empty()) {
@@ -267,6 +275,29 @@ mod tests {
         assert!(matches(&strap, "c0:ff:ee:00:11:22"));
         assert!(!matches(&strap, "polar"));
         assert!(!matches(&strap, "C0:FF:EE:00:11:23"));
+    }
+
+    #[test]
+    fn a_real_address_is_the_identity() {
+        let address = BDAddr::from([0xC0, 0xFF, 0xEE, 0x00, 0x11, 0x22]);
+        assert_eq!(identity(address, "C0:FF:EE:00:11:22"), "C0:FF:EE:00:11:22");
+        assert_eq!(
+            identity(address, "/org/bluez/hci0/dev_C0_FF_EE_00_11_22"),
+            "C0:FF:EE:00:11:22"
+        );
+    }
+
+    #[test]
+    fn a_hidden_address_falls_back_to_the_peripheral_id() {
+        let polar = Uuid::from_u128(0x5a1d_0e3c_8b7f_4c21_9e6a_0d4b_3f2e_1c10);
+        let coospo = Uuid::from_u128(0x77e2_19ab_04cd_4f8e_a1b2_c3d4_e5f6_0718);
+        let polar = device("Polar H10", &identity(BDAddr::default(), polar));
+        let coospo = device("COOSPO HW807", &identity(BDAddr::default(), coospo));
+        assert_eq!(polar.address, "5a1d0e3c-8b7f-4c21-9e6a-0d4b3f2e1c10");
+        assert_ne!(polar.address, coospo.address);
+        assert!(matches(&polar, "5A1D0E3C-8B7F-4C21-9E6A-0D4B3F2E1C10"));
+        assert!(!matches(&coospo, &polar.address));
+        assert!(!matches(&coospo, "00:00:00:00:00:00"));
     }
 
     fn runtime() -> tokio::runtime::Runtime {

@@ -2,6 +2,8 @@ mod request;
 
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 use super::{Context, Wake};
@@ -10,6 +12,7 @@ use request::MAX_TOTAL;
 pub use request::{Request, parse_request};
 
 const REQUEST_TIME: Duration = Duration::from_secs(5);
+const MAX_CLIENTS: usize = 8;
 
 fn respond(stream: &mut TcpStream, status: &str, body: &str) {
     let response = format!(
@@ -82,12 +85,35 @@ pub fn run(ctx: Context, port: u16) {
     ))));
     ctx.status(format!("Listening on port {bound}"));
     crate::log::write(&format!("http listening on port {bound}"));
+    serve(&listener, &ctx, REQUEST_TIME);
+}
+
+fn serve(listener: &TcpListener, ctx: &Context, limit: Duration) {
+    let busy = Arc::new(AtomicUsize::new(0));
     for stream in listener.incoming() {
         if ctx.stopped() {
             return;
         }
-        if let Ok(stream) = stream {
-            handle(stream, &ctx, REQUEST_TIME);
+        let Ok(mut stream) = stream else {
+            continue;
+        };
+        if busy.fetch_add(1, Ordering::AcqRel) >= MAX_CLIENTS {
+            busy.fetch_sub(1, Ordering::AcqRel);
+            let _ = stream.set_write_timeout(Some(Duration::from_millis(200)));
+            respond(&mut stream, "503 Service Unavailable", "");
+            continue;
+        }
+        let ctx = ctx.clone();
+        let count = busy.clone();
+        let spawned = std::thread::Builder::new()
+            .name("http-client".into())
+            .stack_size(64 * 1024)
+            .spawn(move || {
+                handle(stream, &ctx, limit);
+                count.fetch_sub(1, Ordering::AcqRel);
+            });
+        if spawned.is_err() {
+            busy.fetch_sub(1, Ordering::AcqRel);
         }
     }
 }
@@ -95,6 +121,7 @@ pub fn run(ctx: Context, port: u16) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::Event;
 
     #[test]
     fn serves_readings_over_a_real_socket() {
@@ -116,6 +143,91 @@ mod tests {
         assert!(reply.starts_with("HTTP/1.1 200 OK"), "{reply}");
         assert!(reply.ends_with("ok"));
         assert!(rx.iter().any(|e| e.reading() == Some(88)));
+        stop.stop();
+        worker.join().unwrap();
+    }
+
+    type Server = (
+        u16,
+        std::sync::mpsc::Receiver<Event>,
+        crate::sources::Stopper,
+        std::thread::JoinHandle<()>,
+    );
+
+    fn started() -> Server {
+        let (ctx, rx, stop) = Context::test();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+        let worker = std::thread::spawn(move || run(ctx, port));
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline {
+            if let Ok(Event::Status { text, .. }) = rx.recv_timeout(Duration::from_millis(100))
+                && text.starts_with("Listening")
+            {
+                return (port, rx, stop, worker);
+            }
+        }
+        panic!("the server never started");
+    }
+
+    fn post(port: u16, bpm: &str) -> String {
+        let mut s = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+        let request = format!(
+            "POST / HTTP/1.1\r\nContent-Length: {}\r\n\r\n{bpm}",
+            bpm.len()
+        );
+        s.write_all(request.as_bytes()).unwrap();
+        let mut reply = String::new();
+        let _ = s.read_to_string(&mut reply);
+        reply
+    }
+
+    #[test]
+    fn a_silent_client_does_not_hold_up_a_reading() {
+        let (port, rx, stop, worker) = started();
+        let idle = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        std::thread::sleep(Duration::from_millis(100));
+        let start = Instant::now();
+        let reply = post(port, "91");
+        let took = start.elapsed();
+        assert!(reply.starts_with("HTTP/1.1 200 OK"), "{reply}");
+        assert!(took < Duration::from_secs(1), "{took:?}");
+        assert!(rx.iter().any(|e| e.reading() == Some(91)));
+        drop(idle);
+        stop.stop();
+        worker.join().unwrap();
+    }
+
+    #[test]
+    fn a_silent_client_does_not_hold_up_a_stop() {
+        let (port, _rx, stop, worker) = started();
+        let idle = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        std::thread::sleep(Duration::from_millis(100));
+        let start = Instant::now();
+        stop.stop();
+        worker.join().unwrap();
+        let took = start.elapsed();
+        assert!(took < Duration::from_secs(1), "{took:?}");
+        drop(idle);
+    }
+
+    #[test]
+    fn clients_past_the_cap_are_turned_away() {
+        let (port, _rx, stop, worker) = started();
+        let idle: Vec<TcpStream> = (0..MAX_CLIENTS)
+            .map(|_| TcpStream::connect(("127.0.0.1", port)).unwrap())
+            .collect();
+        std::thread::sleep(Duration::from_millis(200));
+        let reply = post(port, "92");
+        assert!(
+            reply.starts_with("HTTP/1.1 503 Service Unavailable"),
+            "{reply}"
+        );
+        drop(idle);
+        std::thread::sleep(Duration::from_millis(200));
+        assert!(post(port, "93").starts_with("HTTP/1.1 200 OK"));
         stop.stop();
         worker.join().unwrap();
     }

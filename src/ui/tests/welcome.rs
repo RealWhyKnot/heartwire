@@ -2,8 +2,6 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use i_slint_backend_testing::ElementHandle;
-use slint::LogicalPosition;
-use slint::platform::{PointerEventButton, WindowEvent};
 
 use super::*;
 use crate::ui::Welcome;
@@ -14,18 +12,7 @@ fn click(app: &AppWindow, label: &str) {
         .filter(|e| e.accessible_label().as_deref() == Some(label))
         .collect();
     assert_eq!(button.len(), 1, "one {label} button");
-    let r = rect(&button[0]);
-    let position = LogicalPosition::new(r.x + r.w / 2.0, r.y + r.h / 2.0);
-    let window = app.window();
-    window.dispatch_event(WindowEvent::PointerMoved { position });
-    window.dispatch_event(WindowEvent::PointerPressed {
-        position,
-        button: PointerEventButton::Left,
-    });
-    window.dispatch_event(WindowEvent::PointerReleased {
-        position,
-        button: PointerEventButton::Left,
-    });
+    press(app, &button[0]);
 }
 
 #[test]

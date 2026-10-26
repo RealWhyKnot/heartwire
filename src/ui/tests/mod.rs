@@ -1,3 +1,4 @@
+mod about;
 mod layout;
 mod reference;
 mod scenes;
@@ -13,8 +14,10 @@ use i_slint_backend_testing::{ElementHandle, ElementRoot};
 use slint::platform::software_renderer::{
     MinimalSoftwareWindow, PremultipliedRgbaColor as Pixel, RepaintBufferType,
 };
-use slint::platform::{Platform, WindowAdapter};
-use slint::{ComponentHandle, ModelRc, PhysicalSize, PlatformError, SharedString, VecModel};
+use slint::platform::{Platform, PointerEventButton, WindowAdapter, WindowEvent};
+use slint::{
+    ComponentHandle, LogicalPosition, ModelRc, PhysicalSize, PlatformError, SharedString, VecModel,
+};
 
 use crate::ui::{AppWindow, DeviceRow, HeartRate, Navigation, Settings, Updates};
 
@@ -174,6 +177,21 @@ fn rect(e: &ElementHandle) -> Rect {
 
 fn all(app: &AppWindow, id: &str) -> Vec<ElementHandle> {
     ElementHandle::find_by_element_id(app, id).collect()
+}
+
+fn press(app: &AppWindow, element: &ElementHandle) {
+    let r = rect(element);
+    let position = LogicalPosition::new(r.x + r.w / 2.0, r.y + r.h / 2.0);
+    let window = app.window();
+    window.dispatch_event(WindowEvent::PointerMoved { position });
+    window.dispatch_event(WindowEvent::PointerPressed {
+        position,
+        button: PointerEventButton::Left,
+    });
+    window.dispatch_event(WindowEvent::PointerReleased {
+        position,
+        button: PointerEventButton::Left,
+    });
 }
 
 fn one(app: &AppWindow, id: &str) -> ElementHandle {
