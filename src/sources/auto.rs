@@ -2,7 +2,7 @@ use std::time::{Duration, Instant};
 
 use super::{Context, ble, pico};
 
-pub fn run(ctx: &Context, device: &str) {
+pub(super) fn run(ctx: &Context, device: &str) {
     let mut bluetooth_retry = Instant::now();
     let mut watch = pico::PortWatch::default();
     while !ctx.stopped() {

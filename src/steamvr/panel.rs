@@ -10,9 +10,9 @@ use slint::{ComponentHandle, PhysicalSize, PlatformError};
 use crate::steamvr::PanelView;
 use crate::ui::{HeartRate, VrPanel};
 
-pub const SCALE: f32 = 2.0;
-pub const WIDTH: u32 = 650;
-pub const HEIGHT: u32 = 500;
+pub(crate) const SCALE: f32 = 2.0;
+pub(crate) const WIDTH: u32 = 650;
+pub(crate) const HEIGHT: u32 = 500;
 
 struct PanelPlatform {
     window: Rc<MinimalSoftwareWindow>,
@@ -21,7 +21,7 @@ struct PanelPlatform {
 
 impl Platform for PanelPlatform {
     fn create_window_adapter(&self) -> Result<Rc<dyn WindowAdapter>, PlatformError> {
-        Ok(self.window.clone())
+        Ok(Rc::<MinimalSoftwareWindow>::clone(&self.window))
     }
 
     fn duration_since_start(&self) -> Duration {
@@ -33,14 +33,14 @@ thread_local! {
     static WINDOW: Rc<MinimalSoftwareWindow> = {
         let window = MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer);
         let _ = slint::platform::set_platform(Box::new(PanelPlatform {
-            window: window.clone(),
+            window: std::rc::Rc::clone(&window),
             started: Instant::now(),
         }));
         window
     };
 }
 
-pub struct Panel {
+pub(crate) struct Panel {
     window: Rc<MinimalSoftwareWindow>,
     ui: VrPanel,
     pixels: Vec<PremultipliedRgbaColor>,
@@ -48,28 +48,32 @@ pub struct Panel {
 }
 
 impl Panel {
-    pub fn new() -> Result<Panel, String> {
+    pub(crate) fn new() -> Result<Panel, String> {
         let window = WINDOW.with(Rc::clone);
-        let ui = VrPanel::new().map_err(|e| e.to_string())?;
+        let ui = VrPanel::new().map_err(|e| format!("create the SteamVR panel: {e}"))?;
         window.dispatch_event(WindowEvent::ScaleFactorChanged {
             scale_factor: SCALE,
         });
         window.set_size(PhysicalSize::new(WIDTH, HEIGHT));
-        ui.show().map_err(|e| e.to_string())?;
+        ui.show()
+            .map_err(|e| format!("show the SteamVR panel: {e}"))?;
         Ok(Panel {
             window,
             ui,
-            pixels: vec![PremultipliedRgbaColor::default(); (WIDTH * HEIGHT) as usize],
+            pixels: vec![
+                PremultipliedRgbaColor::default();
+                usize::try_from(WIDTH * HEIGHT).expect("the frame dimensions fit usize")
+            ],
             drawn: false,
         })
     }
 
     #[cfg(windows)]
-    pub fn drawn(&self) -> bool {
+    pub(crate) fn drawn(&self) -> bool {
         self.drawn
     }
 
-    pub fn render(&mut self, view: &PanelView) -> (&[u8], u32, u32) {
+    pub(crate) fn render(&mut self, view: &PanelView) -> (&[u8], u32, u32) {
         let heart_rate = self.ui.global::<HeartRate>();
         heart_rate.set_connected(view.connected);
         heart_rate.set_bpm(i32::from(view.bpm));
@@ -85,7 +89,10 @@ impl Panel {
         };
         self.window.draw_if_needed(|renderer| {
             renderer.set_repaint_buffer_type(repaint);
-            renderer.render(pixels, WIDTH as usize);
+            renderer.render(
+                pixels,
+                usize::try_from(WIDTH).expect("the window width fits usize"),
+            );
         });
         self.drawn = true;
         (bytemuck::cast_slice(&self.pixels), WIDTH, HEIGHT)
@@ -114,9 +121,13 @@ mod tests {
             };
             let (bytes, width, height) = panel.render(&view);
             assert_eq!((width, height), (WIDTH, HEIGHT));
-            assert_eq!(bytes.len(), (WIDTH * HEIGHT * 4) as usize);
+            assert_eq!(
+                bytes.len(),
+                usize::try_from(WIDTH * HEIGHT * 4).expect("the RGBA frame size fits usize")
+            );
             let at = |x: u32, y: u32| {
-                let i = ((y * WIDTH + x) * 4) as usize;
+                let i =
+                    usize::try_from((y * WIDTH + x) * 4).expect("the pixel offset fits the frame");
                 [bytes[i], bytes[i + 1], bytes[i + 2], bytes[i + 3]]
             };
             assert_eq!(at(2, 2), [0x11, 0x18, 0x27, 255], "background");

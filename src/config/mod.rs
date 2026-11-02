@@ -3,11 +3,11 @@ mod store;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-pub use store::{Store, data_dir, read_hr_osc};
+pub(crate) use store::{Store, data_dir, read_hr_osc};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum Service {
+pub(crate) enum Service {
     Auto,
     Bluetooth,
     Pico,
@@ -17,7 +17,7 @@ pub enum Service {
 }
 
 impl Service {
-    pub const ALL: [Service; 5] = [
+    pub(crate) const ALL: [Service; 5] = [
         Service::Auto,
         Service::Bluetooth,
         Service::Pico,
@@ -25,7 +25,7 @@ impl Service {
         Service::Pulsoid,
     ];
 
-    pub fn key(self) -> &'static str {
+    pub(crate) fn key(self) -> &'static str {
         match self {
             Service::Auto => "auto",
             Service::Bluetooth => "bluetooth",
@@ -35,7 +35,7 @@ impl Service {
         }
     }
 
-    pub fn label(self) -> &'static str {
+    pub(crate) fn label(self) -> &'static str {
         match self {
             Service::Auto => "Auto (Bluetooth / Pico)",
             Service::Bluetooth => "Bluetooth",
@@ -45,13 +45,13 @@ impl Service {
         }
     }
 
-    pub fn index(self) -> usize {
+    pub(crate) fn index(self) -> usize {
         Service::ALL.iter().position(|s| *s == self).unwrap_or(0)
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Config {
+pub(crate) struct Config {
     pub service_type: Service,
     pub http_server_port: u16,
     pub stromno_widget_id: String,
@@ -92,7 +92,7 @@ impl Default for Config {
 }
 
 impl Config {
-    pub fn from_json(text: &str) -> Config {
+    pub(crate) fn from_json(text: &str) -> Config {
         let mut merged = match serde_json::to_value(Config::default()) {
             Ok(Value::Object(map)) => map,
             _ => Map::new(),
@@ -134,7 +134,7 @@ impl Config {
         }
     }
 
-    pub fn set(&mut self, key: &str, value: &str) -> bool {
+    pub(crate) fn set(&mut self, key: &str, value: &str) -> bool {
         fn update<T: PartialEq>(field: &mut T, value: Option<T>) -> bool {
             match value {
                 Some(value) if *field != value => {
@@ -168,7 +168,7 @@ impl Config {
         }
     }
 
-    pub fn source_key(&self) -> (Service, u16, &str, &str) {
+    pub(crate) fn source_key(&self) -> (Service, u16, &str, &str) {
         (
             self.service_type,
             self.http_server_port,
@@ -179,17 +179,18 @@ impl Config {
 }
 
 fn coerce(default: &Value, value: Value) -> Option<Value> {
+    use num_traits::ToPrimitive;
     match (default, value) {
         (Value::Number(_), Value::Number(n)) => n
             .as_f64()
             .filter(|f| f.is_finite() && *f >= 0.0)
-            .map(|f| Value::from(f.round() as u64)),
+            .map(|f| Value::from(f.round().to_u64().unwrap_or(u64::MAX))),
         (Value::Number(_), Value::String(s)) => s
             .trim()
             .parse::<f64>()
             .ok()
             .filter(|f| f.is_finite() && *f >= 0.0)
-            .map(|f| Value::from(f.round() as u64)),
+            .map(|f| Value::from(f.round().to_u64().unwrap_or(u64::MAX))),
         (Value::String(_), Value::String(s)) => Some(Value::String(s)),
         (Value::Bool(_), Value::Bool(b)) => Some(Value::Bool(b)),
         _ => None,
@@ -199,6 +200,24 @@ fn coerce(default: &Value, value: Value) -> Option<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn numeric_settings_keep_rounding_and_saturation() {
+        let default = Value::from(0);
+        for (input, expected) in [("1.4", 1), ("1.5", 2), ("1e300", u64::MAX)] {
+            assert_eq!(
+                coerce(&default, Value::from(input)),
+                Some(Value::from(expected))
+            );
+            assert_eq!(
+                coerce(&default, Value::from(input.parse::<f64>().unwrap())),
+                Some(Value::from(expected))
+            );
+        }
+        for input in ["-1", "NaN", "inf"] {
+            assert_eq!(coerce(&default, Value::from(input)), None);
+        }
+    }
 
     #[test]
     fn upstream_config_keeps_its_values() {

@@ -17,20 +17,20 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
 const SILENCE_CHECK: Duration = Duration::from_secs(15);
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum Outcome {
+pub(crate) enum Outcome {
     NoAdapter,
     Stopped,
     Interrupted,
 }
 
-pub fn run(ctx: &Context, wanted: &str, interrupt: &mut dyn FnMut() -> bool) -> Outcome {
+pub(crate) fn run(ctx: &Context, wanted: &str, interrupt: &mut dyn FnMut() -> bool) -> Outcome {
     let runtime = match tokio::runtime::Builder::new_current_thread()
         .enable_time()
         .build()
     {
         Ok(runtime) => runtime,
         Err(error) => {
-            crate::log::write(&format!("bluetooth runtime: {error}"));
+            tracing::warn!(error = %error, "bluetooth runtime: {error}");
             return Outcome::NoAdapter;
         }
     };
@@ -42,12 +42,12 @@ async fn session(ctx: &Context, wanted: &str, interrupt: &mut dyn FnMut() -> boo
         Ok(manager) => match manager.adapters().await {
             Ok(list) => list.into_iter().next(),
             Err(error) => {
-                crate::log::write(&format!("bluetooth adapters: {error}"));
+                tracing::warn!(error = %error, "bluetooth adapters: {error}");
                 None
             }
         },
         Err(error) => {
-            crate::log::write(&format!("bluetooth manager: {error}"));
+            tracing::warn!(error = %error, "bluetooth manager: {error}");
             None
         }
     };
@@ -84,7 +84,7 @@ fn identity(address: BDAddr, id: impl std::fmt::Display) -> String {
     }
 }
 
-pub fn matches(device: &Device, wanted: &str) -> bool {
+pub(crate) fn matches(device: &Device, wanted: &str) -> bool {
     let wanted = wanted.trim();
     wanted.is_empty()
         || device.address.eq_ignore_ascii_case(wanted)
@@ -151,11 +151,11 @@ async fn find(
 
 async fn stream(ctx: &Context, adapter: &Adapter, peripheral: Peripheral, label: &str) {
     ctx.status(format!("Connecting to {label}"));
-    crate::log::write(&format!("bluetooth connecting to {label}"));
+    tracing::info!(label = %label, "bluetooth connecting to {label}");
     match subscribe(ctx, &peripheral).await {
         Some(Ok(())) => {}
         Some(Err(error)) => {
-            crate::log::write(&format!("bluetooth {label}: {error}"));
+            tracing::warn!(error = %error, label = %label, "bluetooth {label}: {error}");
             ctx.status(format!("Could not connect to {label}"));
             let _ = peripheral.disconnect().await;
             pause(ctx, Duration::from_secs(3)).await;
@@ -173,7 +173,7 @@ async fn stream(ctx: &Context, adapter: &Adapter, peripheral: Peripheral, label:
         return;
     };
     ctx.status(format!("Bluetooth: {label}"));
-    crate::log::write(&format!("bluetooth streaming from {label}"));
+    tracing::info!(label = %label, "bluetooth streaming from {label}");
     let id = peripheral.id();
     let mut last = Instant::now();
     let mut no_contact = false;
@@ -219,7 +219,7 @@ async fn stream(ctx: &Context, adapter: &Adapter, peripheral: Peripheral, label:
             }
         }
     }
-    crate::log::write(&format!("bluetooth lost {label}"));
+    tracing::info!(label = %label, "bluetooth lost {label}");
     ctx.status(format!("Lost {label}, reconnecting"));
     let _ = peripheral.disconnect().await;
     pause(ctx, Duration::from_secs(2)).await;
@@ -300,35 +300,25 @@ mod tests {
         assert!(!matches(&coospo, "00:00:00:00:00:00"));
     }
 
-    fn runtime() -> tokio::runtime::Runtime {
-        tokio::runtime::Builder::new_current_thread()
-            .enable_time()
-            .build()
-            .unwrap()
-    }
-
-    #[test]
-    fn a_pause_runs_its_full_length_without_a_stop() {
+    #[tokio::test(start_paused = true)]
+    async fn a_pause_runs_its_full_length_without_a_stop() {
         let (ctx, _rx, _stop) = Context::test();
-        let start = Instant::now();
-        assert!(!runtime().block_on(pause(&ctx, Duration::from_millis(60))));
-        assert!(start.elapsed() >= Duration::from_millis(60));
+        let start = tokio::time::Instant::now();
+        assert!(!pause(&ctx, Duration::from_millis(60)).await);
+        assert_eq!(start.elapsed(), Duration::from_millis(60));
     }
 
-    #[test]
-    fn a_stop_ends_a_pause_and_guarded_work_at_once() {
+    #[tokio::test(start_paused = true)]
+    async fn a_stop_ends_a_pause_and_guarded_work_at_once() {
         let (ctx, _rx, stop) = Context::test();
-        let worker = std::thread::spawn(move || {
-            let rt = runtime();
-            let start = Instant::now();
-            assert!(rt.block_on(pause(&ctx, Duration::from_secs(30))));
-            let guarded_out = rt.block_on(guarded(&ctx, std::future::pending::<()>()));
-            assert!(guarded_out.is_none());
-            start.elapsed()
-        });
-        std::thread::sleep(Duration::from_millis(20));
+        let start = tokio::time::Instant::now();
+        let mut paused = std::pin::pin!(pause(&ctx, Duration::from_secs(30)));
+        let mut task = std::task::Context::from_waker(std::task::Waker::noop());
+        assert!(paused.as_mut().poll(&mut task).is_pending());
         stop.stop();
-        assert!(worker.join().unwrap() < Duration::from_secs(1));
+        assert!(paused.await);
+        assert!(guarded(&ctx, std::future::pending::<()>()).await.is_none());
+        assert_eq!(start.elapsed(), Duration::ZERO);
     }
 
     #[test]

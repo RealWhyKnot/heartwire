@@ -6,8 +6,12 @@ fn every_element_stays_inside_the_window() {
     let window = Rect {
         x: 0.0,
         y: 0.0,
-        w: WIDTH as f32,
-        h: HEIGHT as f32,
+        w: (WIDTH)
+            .to_f32()
+            .expect("pixel coordinates fit the f32 range"),
+        h: (HEIGHT)
+            .to_f32()
+            .expect("pixel coordinates fit the f32 range"),
     };
     each_scene(|name, app, _| {
         for e in app.root_element().query_descendants().find_all() {
@@ -46,10 +50,18 @@ fn text_stays_inside_its_box() {
                 h: r.h + 4.0,
             };
             let ink_rect = Rect {
-                x: ink.x0 as f32,
-                y: ink.y0 as f32,
-                w: (ink.x1 - ink.x0) as f32,
-                h: (ink.y1 - ink.y0) as f32,
+                x: (ink.x0)
+                    .to_f32()
+                    .expect("pixel coordinates fit the f32 range"),
+                y: (ink.y0)
+                    .to_f32()
+                    .expect("pixel coordinates fit the f32 range"),
+                w: (ink.x1 - ink.x0)
+                    .to_f32()
+                    .expect("pixel coordinates fit the f32 range"),
+                h: (ink.y1 - ink.y0)
+                    .to_f32()
+                    .expect("pixel coordinates fit the f32 range"),
             };
             assert!(
                 bounds.contains(&ink_rect, 0.0),
@@ -132,7 +144,14 @@ fn controls_center_their_text() {
                     e.accessible_label()
                 );
                 assert!(
-                    ink.y0 as f32 >= r.y - 0.5 && ink.y1 as f32 <= r.bottom() + 0.5,
+                    (ink.y0)
+                        .to_f32()
+                        .expect("pixel coordinates fit the f32 range")
+                        >= r.y - 0.5
+                        && (ink.y1)
+                            .to_f32()
+                            .expect("pixel coordinates fit the f32 range")
+                            <= r.bottom() + 0.5,
                     "{name}: {id} {:?} ink {ink:?} is clipped by {r:?}",
                     e.accessible_label()
                 );

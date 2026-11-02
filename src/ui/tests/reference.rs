@@ -7,8 +7,22 @@ fn nav_matches_hr_osc() {
     for (text, x) in [("Home", 9), ("Settings", 63), ("About", 134)] {
         let r = label_rect(&app, "NavItem::label", text);
         let ink = ink_in(&frame, r, 0.0).unwrap();
-        assert_near(&format!("{text} ink left"), ink.x0 as f32, x as f32, 1.0);
-        assert_near(&format!("{text} ink top"), ink.y0 as f32, 14.0, 1.0);
+        assert_near(
+            &format!("{text} ink left"),
+            (ink.x0)
+                .to_f32()
+                .expect("pixel coordinates fit the f32 range"),
+            (x).to_f32().expect("pixel coordinates fit the f32 range"),
+            1.0,
+        );
+        assert_near(
+            &format!("{text} ink top"),
+            (ink.y0)
+                .to_f32()
+                .expect("pixel coordinates fit the f32 range"),
+            14.0,
+            1.0,
+        );
     }
     let underline = ink_in(
         &frame,
@@ -22,8 +36,22 @@ fn nav_matches_hr_osc() {
     )
     .unwrap();
     assert_eq!((underline.y0, underline.y1), (32, 34));
-    assert_near("underline left", underline.x0 as f32, 8.0, 0.0);
-    assert_near("underline right", underline.x1 as f32, 51.0, 1.0);
+    assert_near(
+        "underline left",
+        (underline.x0)
+            .to_f32()
+            .expect("pixel coordinates fit the f32 range"),
+        8.0,
+        0.0,
+    );
+    assert_near(
+        "underline right",
+        (underline.x1)
+            .to_f32()
+            .expect("pixel coordinates fit the f32 range"),
+        51.0,
+        1.0,
+    );
 }
 
 #[test]
@@ -49,7 +77,9 @@ fn home_matches_hr_osc() {
         let r = rect(&one(&app, id));
         assert_near(
             &format!("{id} ink top"),
-            ink_top(&frame, r) as f32,
+            (ink_top(&frame, r))
+                .to_f32()
+                .expect("pixel coordinates fit the f32 range"),
             top,
             1.0,
         );
@@ -149,13 +179,17 @@ fn about_matches_hr_osc() {
     );
     assert_near(
         "title ink top",
-        ink_top(&frame, rect(&one(&app, "AboutPage::title"))) as f32,
+        (ink_top(&frame, rect(&one(&app, "AboutPage::title"))))
+            .to_f32()
+            .expect("pixel coordinates fit the f32 range"),
         60.0,
         1.0,
     );
     assert_near(
         "version ink top",
-        ink_top(&frame, rect(&one(&app, "AboutPage::version"))) as f32,
+        (ink_top(&frame, rect(&one(&app, "AboutPage::version"))))
+            .to_f32()
+            .expect("pixel coordinates fit the f32 range"),
         90.0,
         1.0,
     );
@@ -165,7 +199,16 @@ fn about_matches_hr_osc() {
         .collect();
     assert_eq!(links.len(), 3);
     for (actual, expected) in links.iter().zip([156, 188, 208]) {
-        assert_near("link ink top", *actual as f32, expected as f32, 1.0);
+        assert_near(
+            "link ink top",
+            (*actual)
+                .to_f32()
+                .expect("pixel coordinates fit the f32 range"),
+            (expected)
+                .to_f32()
+                .expect("pixel coordinates fit the f32 range"),
+            1.0,
+        );
     }
 }
 
@@ -180,7 +223,10 @@ fn ping_animation_stays_behind_the_numbers() {
         let frame = render(&app);
         let ink = ink_in(&frame, bpm, 0.0).expect("bpm is drawn");
         assert!(
-            ink.y1 as f32 <= bpm.bottom() + 2.0,
+            (ink.y1)
+                .to_f32()
+                .expect("pixel coordinates fit the f32 range")
+                <= bpm.bottom() + 2.0,
             "at {ms}ms the bpm ink is {ink:?}"
         );
     }

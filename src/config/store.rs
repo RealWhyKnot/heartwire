@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use super::Config;
 
-pub fn data_dir() -> PathBuf {
+pub(crate) fn data_dir() -> PathBuf {
     #[cfg(windows)]
     let base = std::env::var_os("APPDATA").map(PathBuf::from);
     #[cfg(target_os = "macos")]
@@ -24,29 +24,29 @@ fn hr_osc_config(base: &Path) -> Option<PathBuf> {
     path.is_file().then_some(path)
 }
 
-pub struct Loaded {
+pub(crate) struct Loaded {
     pub config: Config,
     pub hr_osc: Option<PathBuf>,
 }
 
-pub fn read_hr_osc(path: &Path) -> Option<Config> {
+pub(crate) fn read_hr_osc(path: &Path) -> Option<Config> {
     std::fs::read_to_string(path)
         .ok()
         .map(|text| Config::from_json(&text))
 }
 
-pub struct Store {
+pub(crate) struct Store {
     path: PathBuf,
 }
 
 impl Store {
-    pub fn new(dir: &Path) -> Store {
+    pub(crate) fn new(dir: &Path) -> Store {
         Store {
             path: dir.join("config.json"),
         }
     }
 
-    pub fn load(&self) -> Loaded {
+    pub(crate) fn load(&self) -> Loaded {
         let mut last_error = None;
         for _ in 0..5 {
             match std::fs::read_to_string(&self.path) {
@@ -71,7 +71,7 @@ impl Store {
             }
         }
         if let Some(error) = last_error {
-            crate::log::write(&format!("reading settings: {error}, running on defaults"));
+            tracing::warn!(error = %error, "reading settings: {error}, running on defaults");
         }
         Loaded {
             config: Config::default(),
@@ -79,7 +79,7 @@ impl Store {
         }
     }
 
-    pub fn save(&self, config: &Config) {
+    pub(crate) fn save(&self, config: &Config) {
         let Ok(text) = serde_json::to_string_pretty(config) else {
             return;
         };
@@ -88,7 +88,7 @@ impl Store {
             .and_then(|_| std::fs::write(&tmp, text + "\n"))
             .and_then(|_| std::fs::rename(&tmp, &self.path));
         if let Err(error) = result {
-            crate::log::write(&format!("saving settings: {error}"));
+            tracing::error!(error = %error, "saving settings: {error}");
         }
     }
 }

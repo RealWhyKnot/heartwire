@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use ureq::tls::{RootCerts, TlsConfig, TlsProvider};
 
-pub fn agent(timeout: Duration) -> ureq::Agent {
+pub(crate) fn agent(timeout: Duration) -> ureq::Agent {
     let tls = TlsConfig::builder()
         .provider(TlsProvider::NativeTls)
         .root_certs(RootCerts::PlatformVerifier)

@@ -30,7 +30,7 @@ fn about_links_open_pages_that_exist() {
     app.global::<Navigation>().set_page(2);
     let opened = Rc::new(RefCell::new(Vec::new()));
     {
-        let opened = opened.clone();
+        let opened = std::rc::Rc::clone(&opened);
         app.global::<Navigation>()
             .on_open_link(move |url| opened.borrow_mut().push(url.to_string()));
     }

@@ -29,18 +29,21 @@ pub(super) fn session(
         utility.start(openvr::APP_UTILITY)?;
         apply_registration(&utility, *enabled, data_dir)?;
         note(*enabled);
-        crate::log::write(if *enabled {
-            "steamvr: added to SteamVR start-up"
-        } else {
-            "steamvr: removed from SteamVR start-up"
-        });
+        tracing::info!(
+            "{}",
+            if *enabled {
+                "steamvr: added to SteamVR start-up"
+            } else {
+                "steamvr: removed from SteamVR start-up"
+            }
+        );
         if !*enabled {
             return Ok(SessionEnd::Unregistered);
         }
     }
     let mut vr = openvr::load_runtime()?;
     vr.start(openvr::APP_OVERLAY)?;
-    crate::log::write("steamvr: dashboard connected");
+    tracing::info!("steamvr: dashboard connected");
     let (_, icon) = write_files(data_dir)?;
     let apps = vr.applications()?;
     let overlay = vr.overlay()?;
@@ -64,7 +67,7 @@ pub(super) fn session(
         }
         if quit {
             system.ack_quit();
-            crate::log::write("steamvr: SteamVR is closing");
+            tracing::info!("steamvr: SteamVR is closing");
             break SessionEnd::SteamVrQuit;
         }
         if stale && (overlay.is_visible(main) || !panel.drawn()) {
@@ -79,7 +82,7 @@ pub(super) fn session(
                 if !on {
                     overlay.destroy(main);
                     apply_registration(&vr, false, data_dir)?;
-                    crate::log::write("steamvr: removed from SteamVR start-up");
+                    tracing::info!("steamvr: removed from SteamVR start-up");
                     note(false);
                     return Ok(SessionEnd::Unregistered);
                 }

@@ -1,5 +1,3 @@
-use std::sync::mpsc::Sender;
-
 use slint::ComponentHandle;
 
 use super::state::App;
@@ -8,13 +6,13 @@ use crate::engine::{self, View};
 use crate::steamvr;
 use crate::ui::{AppWindow, HeartRate};
 
-pub struct Bridge {
+pub(super) struct Bridge {
     window: slint::Weak<AppWindow>,
-    vr: Sender<steamvr::Msg>,
+    vr: steamvr::Sender,
 }
 
 impl Bridge {
-    pub fn new(window: &AppWindow, vr: Sender<steamvr::Msg>) -> Bridge {
+    pub(super) fn new(window: &AppWindow, vr: steamvr::Sender) -> Bridge {
         Bridge {
             window: window.as_weak(),
             vr,
@@ -25,12 +23,12 @@ impl Bridge {
 impl engine::Ui for Bridge {
     fn show(&self, view: &View) {
         let percent = format!("{:.2}", view.percent);
-        let _ = self.vr.send(steamvr::Msg::View(steamvr::PanelView {
+        self.vr.view(steamvr::PanelView {
             connected: view.connected,
             bpm: view.bpm,
             percent: percent.clone(),
             status: view.status.clone(),
-        }));
+        });
         let view = view.clone();
         let _ = self.window.upgrade_in_event_loop(move |window| {
             taskbar::update(view.connected, view.bpm);

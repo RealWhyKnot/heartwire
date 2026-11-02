@@ -1,3 +1,5 @@
+use num_traits::ToPrimitive;
+
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
@@ -7,7 +9,6 @@ use slint::{ComponentHandle, SharedString};
 
 use super::state::App;
 use crate::config::Config;
-use crate::log;
 use crate::ui::{AppWindow, Updates};
 use crate::update::{self, Release};
 use crate::version::{self, Channel};
@@ -27,9 +28,12 @@ fn check(window: &AppWindow, pending: Pending, skipped: String) {
         .spawn(
             move || match update::check(version::VERSION, Channel::current()) {
                 Ok(Some(release)) if release.tag_name != skipped => {
-                    log::write(&format!("update {} available", release.tag_name));
+                    tracing::info!("update {} available", release.tag_name);
                     let tag = release.tag_name.trim_start_matches('v').to_owned();
-                    *pending.lock().unwrap() = Some(release);
+                    *pending
+                        .lock()
+                        .expect("release storage stays valid unless its holder panics") =
+                        Some(release);
                     let _ = weak.upgrade_in_event_loop(move |w| {
                         let updates = w.global::<Updates>();
                         updates.set_version(tag.into());
@@ -38,14 +42,18 @@ fn check(window: &AppWindow, pending: Pending, skipped: String) {
                         updates.set_shown(true);
                     });
                 }
-                Ok(_) => log::write("no newer release"),
-                Err(error) => log::write(&format!("update check: {error}")),
+                Ok(_) => tracing::info!("no newer release"),
+                Err(error) => tracing::warn!(error = %error, "update check: {error}"),
             },
         );
 }
 
 fn install(window: &AppWindow, pending: &Pending, staging: PathBuf, log_path: PathBuf) {
-    let Some(release) = pending.lock().unwrap().clone() else {
+    let Some(release) = pending
+        .lock()
+        .expect("release storage stays valid unless its holder panics")
+        .clone()
+    else {
         return;
     };
     let updates = window.global::<Updates>();
@@ -57,10 +65,15 @@ fn install(window: &AppWindow, pending: &Pending, staging: PathBuf, log_path: Pa
         .spawn(move || {
             let shown = Mutex::new(-1i32);
             let progress = |fraction: f32| {
-                let percent = (fraction * 100.0) as i32;
-                let mut shown = shown.lock().unwrap();
+                let percent = (fraction * 100.0)
+                    .to_i32()
+                    .expect("download progress is between zero and one");
+                let mut shown = shown
+                    .lock()
+                    .expect("progress storage stays valid unless its holder panics");
                 if *shown != percent {
                     *shown = percent;
+                    drop(shown);
                     let _ = weak.upgrade_in_event_loop(move |w| {
                         w.global::<Updates>()
                             .set_state(format!("Downloading {percent}%").into());
@@ -72,11 +85,11 @@ fn install(window: &AppWindow, pending: &Pending, staging: PathBuf, log_path: Pa
                 .and_then(|file| update::apply(package, &file, &staging, &log_path))
             {
                 Ok(()) => {
-                    log::write(&format!("installing {}", release.tag_name));
+                    tracing::info!("installing {}", release.tag_name);
                     quit();
                 }
                 Err(error) => {
-                    log::write(&format!("update failed: {error}"));
+                    tracing::error!(error = %error, "update failed: {error}");
                     let _ = weak.upgrade_in_event_loop(move |w| {
                         let updates = w.global::<Updates>();
                         updates.set_busy(false);
@@ -87,7 +100,7 @@ fn install(window: &AppWindow, pending: &Pending, staging: PathBuf, log_path: Pa
         });
 }
 
-pub fn bind(window: &AppWindow, app: &Rc<App>, dir: &Path, config: &Config) {
+pub(super) fn bind(window: &AppWindow, app: &Rc<App>, dir: &Path, config: &Config) {
     let pending: Pending = Arc::default();
     let updates = window.global::<Updates>();
     {
@@ -100,11 +113,16 @@ pub fn bind(window: &AppWindow, app: &Rc<App>, dir: &Path, config: &Config) {
     }
     {
         let weak = window.as_weak();
-        let pending = pending.clone();
-        let app = app.clone();
+        let pending = std::sync::Arc::clone(&pending);
+        let app = std::rc::Rc::clone(app);
         updates.on_update_skip(move || {
-            if let Some(tag) = pending.lock().unwrap().as_ref().map(|r| r.tag_name.clone()) {
-                log::write(&format!("skipping {tag}"));
+            if let Some(tag) = pending
+                .lock()
+                .expect("release storage stays valid unless its holder panics")
+                .as_ref()
+                .map(|r| r.tag_name.clone())
+            {
+                tracing::info!(tag = %tag, "skipping {tag}");
                 app.edit(Duration::ZERO, |c| {
                     c.skipped_update = tag;
                     true
@@ -117,7 +135,7 @@ pub fn bind(window: &AppWindow, app: &Rc<App>, dir: &Path, config: &Config) {
     }
     {
         let weak = window.as_weak();
-        let pending = pending.clone();
+        let pending = std::sync::Arc::clone(&pending);
         let staging = dir.join("update");
         let log_path = dir.join("heartwire.log");
         updates.on_update_now(move || {

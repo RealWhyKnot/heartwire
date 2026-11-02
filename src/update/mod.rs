@@ -8,8 +8,8 @@ use serde::Deserialize;
 
 use crate::version::Channel;
 
-pub use download::{download, parse_integrity};
-pub use install::apply;
+pub(crate) use download::{download, parse_integrity};
+pub(crate) use install::apply;
 
 const RELEASES_URL: &str =
     "https://api.github.com/repos/RealWhyKnot/heartwire/releases?per_page=20";
@@ -18,7 +18,7 @@ const LATEST_URL: &str = "https://api.github.com/repos/RealWhyKnot/heartwire/rel
 const UNINSTALLER: &str = "Uninstall.exe";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct AppVersion {
+pub(crate) struct AppVersion {
     year: u32,
     month: u32,
     day: u32,
@@ -27,7 +27,7 @@ pub struct AppVersion {
 }
 
 impl AppVersion {
-    pub fn parse(text: &str) -> Option<AppVersion> {
+    pub(crate) fn parse(text: &str) -> Option<AppVersion> {
         let text = text.trim();
         let text = text.strip_prefix(['v', 'V']).unwrap_or(text);
         let (numbers, suffix) = text.split_once('-').unwrap_or((text, ""));
@@ -44,13 +44,13 @@ impl AppVersion {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct Asset {
+pub(crate) struct Asset {
     pub name: String,
     pub browser_download_url: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct Release {
+pub(crate) struct Release {
     pub tag_name: String,
     #[serde(default)]
     pub draft: bool,
@@ -60,7 +60,11 @@ pub struct Release {
     pub assets: Vec<Asset>,
 }
 
-pub fn select(releases: &[Release], current: AppVersion, channel: Channel) -> Option<&Release> {
+pub(crate) fn select(
+    releases: &[Release],
+    current: AppVersion,
+    channel: Channel,
+) -> Option<&Release> {
     if channel == Channel::Dev {
         return None;
     }
@@ -79,7 +83,7 @@ pub fn select(releases: &[Release], current: AppVersion, channel: Channel) -> Op
     best.map(|b| b.0)
 }
 
-pub fn rid() -> &'static str {
+pub(crate) fn rid() -> &'static str {
     match (std::env::consts::OS, std::env::consts::ARCH) {
         ("windows", "aarch64") => "win-arm64",
         ("windows", _) => "win-x64",
@@ -96,13 +100,13 @@ fn base_name(tag: &str) -> String {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Package {
+pub(crate) enum Package {
     Archive,
     Setup,
 }
 
 impl Package {
-    pub fn current() -> Package {
+    pub(crate) fn current() -> Package {
         let exe = std::env::current_exe().ok();
         Package::for_folder(exe.as_deref().and_then(Path::parent))
     }
@@ -114,7 +118,7 @@ impl Package {
         }
     }
 
-    pub fn asset(self, tag: &str) -> String {
+    pub(crate) fn asset(self, tag: &str) -> String {
         match self {
             Package::Archive if cfg!(windows) => format!("{}.zip", base_name(tag)),
             Package::Archive => format!("{}.tar.gz", base_name(tag)),
@@ -122,7 +126,7 @@ impl Package {
         }
     }
 
-    pub fn integrity(self, tag: &str) -> String {
+    pub(crate) fn integrity(self, tag: &str) -> String {
         match self {
             Package::Archive => format!("{}.integrity.tsv", base_name(tag)),
             Package::Setup => format!("{}-setup.integrity.tsv", base_name(tag)),
@@ -134,7 +138,7 @@ fn agent() -> ureq::Agent {
     crate::net::agent(Duration::from_secs(60))
 }
 
-pub fn check(current: &str, channel: Channel) -> Result<Option<Release>, String> {
+pub(crate) fn check(current: &str, channel: Channel) -> Result<Option<Release>, String> {
     let Some(current) = AppVersion::parse(current) else {
         return Ok(None);
     };
@@ -143,18 +147,24 @@ pub fn check(current: &str, channel: Channel) -> Result<Option<Release>, String>
     }
     let url = match channel {
         Channel::Release => LATEST_URL,
-        _ => RELEASES_URL,
+        Channel::Beta | Channel::Dev => RELEASES_URL,
     };
     let text = agent()
         .get(url)
         .header("Accept", "application/vnd.github+json")
         .call()
-        .map_err(|e| e.to_string())?
+        .map_err(|e| {
+            format!("check Heartwire releases on GitHub: {e}. Check your connection and try again.")
+        })?
         .body_mut()
         .with_config()
         .limit(4 * 1024 * 1024)
         .read_to_string()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            format!(
+                "read the Heartwire release list from GitHub: {e}. Try checking for updates again."
+            )
+        })?;
     let releases = parse_releases(&text)?;
     let Some(release) = select(&releases, current, channel) else {
         return Ok(None);
@@ -173,7 +183,11 @@ fn parse_releases(text: &str) -> Result<Vec<Release>, String> {
     } else {
         serde_json::from_str(text).map(|release| vec![release])
     };
-    parsed.map_err(|e| e.to_string())
+    parsed.map_err(|e| {
+        format!(
+            "parse the Heartwire release list from GitHub: {e}. Try checking for updates again."
+        )
+    })
 }
 
 fn asset_url<'a>(release: &'a Release, name: &str) -> Result<&'a str, String> {
@@ -189,7 +203,7 @@ fn asset_url<'a>(release: &'a Release, name: &str) -> Result<&'a str, String> {
 pub(crate) mod testing {
     use std::path::PathBuf;
 
-    pub fn scratch(name: &str) -> PathBuf {
+    pub(crate) fn scratch(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("heartwire-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();

@@ -4,21 +4,21 @@ use crate::config::{Config, Service};
 use crate::engine::Event;
 
 mod auto;
-pub mod ble;
+pub(crate) mod ble;
 mod context;
-pub mod http;
-pub mod pico;
-pub mod pulsoid;
+pub(crate) mod http;
+pub(crate) mod pico;
+pub(crate) mod pulsoid;
 
-pub use context::{Context, Handle, Stopper, Wake};
+pub(crate) use context::{Context, Handle, Stopper, Wake};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Device {
+pub(crate) struct Device {
     pub name: String,
     pub address: String,
 }
 
-pub fn spawn(config: &Config, generation: u64, tx: Sender<Event>) -> Handle {
+pub(crate) fn spawn(config: &Config, generation: u64, tx: Sender<Event>) -> Handle {
     let ctx = Context::new(generation, tx);
     let stopper = ctx.stopper();
     let service = config.service_type;
@@ -36,7 +36,7 @@ pub fn spawn(config: &Config, generation: u64, tx: Sender<Event>) -> Handle {
                 }
             }
             Service::Pico => pico::run(&ctx),
-            Service::Http => http::run(ctx, port),
+            Service::Http => http::run(&ctx, port),
             Service::Pulsoid => pulsoid::run(&ctx, &widget),
         })
         .ok();

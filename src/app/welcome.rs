@@ -7,10 +7,9 @@ use slint::ComponentHandle;
 use super::settings;
 use super::state::App;
 use crate::config::{Config, read_hr_osc};
-use crate::log;
 use crate::ui::{AppWindow, Welcome};
 
-pub fn carry_over(current: &Config, imported: Config) -> Config {
+pub(super) fn carry_over(current: &Config, imported: Config) -> Config {
     Config {
         steamvr_autostart: current.steamvr_autostart,
         steamvr_registered: current.steamvr_registered,
@@ -19,7 +18,7 @@ pub fn carry_over(current: &Config, imported: Config) -> Config {
     }
 }
 
-pub fn offer(window: &AppWindow, app: &Rc<App>, hr_osc: Option<PathBuf>) {
+pub(super) fn offer(window: &AppWindow, app: &Rc<App>, hr_osc: Option<PathBuf>) {
     let Some(path) = hr_osc else {
         return;
     };
@@ -27,7 +26,7 @@ pub fn offer(window: &AppWindow, app: &Rc<App>, hr_osc: Option<PathBuf>) {
     welcome.set_shown(true);
     {
         let weak = window.as_weak();
-        let app = app.clone();
+        let app = std::rc::Rc::clone(app);
         welcome.on_import_hr_osc(move || {
             let Some(w) = weak.upgrade() else {
                 return;
@@ -43,9 +42,9 @@ pub fn offer(window: &AppWindow, app: &Rc<App>, hr_osc: Option<PathBuf>) {
                     if let Some(config) = applied {
                         settings::load(&w, &config);
                     }
-                    log::write("imported settings from hr-osc");
+                    tracing::info!("imported settings from hr-osc");
                 }
-                None => log::write("hr-osc settings could not be read"),
+                None => tracing::warn!("hr-osc settings could not be read"),
             }
             w.global::<Welcome>().set_shown(false);
         });
@@ -53,7 +52,7 @@ pub fn offer(window: &AppWindow, app: &Rc<App>, hr_osc: Option<PathBuf>) {
     {
         let weak = window.as_weak();
         welcome.on_skip(move || {
-            log::write("kept the default settings");
+            tracing::info!("kept the default settings");
             if let Some(w) = weak.upgrade() {
                 w.global::<Welcome>().set_shown(false);
             }

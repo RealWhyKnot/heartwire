@@ -1,4 +1,7 @@
+use num_traits::ToPrimitive;
+
 mod cases;
+mod check;
 mod render;
 
 use std::io::Write;
@@ -7,28 +10,27 @@ use std::time::{Duration, Instant};
 
 use crate::version::{self, Channel};
 
-pub const FLAG: &str = "--perf";
+pub(crate) const FLAG: &str = "--perf";
 
 #[derive(Clone, Copy)]
-pub struct Settings {
+pub(crate) struct Settings {
     pub per_case: Duration,
     pub samples: u32,
 }
 
 impl Settings {
-    pub const FULL: Settings = Settings {
+    pub(crate) const FULL: Settings = Settings {
         per_case: Duration::from_millis(300),
         samples: 25,
     };
 
-    #[cfg(test)]
-    pub const QUICK: Settings = Settings {
+    pub(crate) const QUICK: Settings = Settings {
         per_case: Duration::from_micros(300),
         samples: 3,
     };
 }
 
-pub struct Case {
+pub(crate) struct Case {
     group: &'static str,
     name: &'static str,
     budget: Duration,
@@ -36,7 +38,7 @@ pub struct Case {
 }
 
 impl Case {
-    pub fn new(
+    pub(crate) fn new(
         group: &'static str,
         name: &'static str,
         budget: Duration,
@@ -52,7 +54,7 @@ impl Case {
 }
 
 #[derive(Clone, Debug)]
-pub struct Timing {
+pub(crate) struct Timing {
     pub group: &'static str,
     pub name: &'static str,
     pub budget: Duration,
@@ -63,26 +65,31 @@ pub struct Timing {
 }
 
 impl Timing {
-    pub fn over_budget(&self) -> bool {
+    pub(crate) fn over_budget(&self) -> bool {
         self.median > self.budget
     }
 }
 
-pub fn time(case: &mut Case, settings: Settings) -> Timing {
+pub(crate) fn time(case: &mut Case, settings: Settings) -> Timing {
+    time_with(case, settings, Instant::now)
+}
+
+fn time_with(case: &mut Case, settings: Settings, mut now: impl FnMut() -> Instant) -> Timing {
     let run = &mut case.run;
     run();
-    let start = Instant::now();
+    let start = now();
     run();
-    let one = start.elapsed().max(Duration::from_nanos(1));
+    let one = now().duration_since(start).max(Duration::from_nanos(1));
     let target = settings.per_case / settings.samples.max(1);
-    let batch = (target.as_nanos() / one.as_nanos()).clamp(1, 1_000_000) as u32;
+    let batch = u32::try_from((target.as_nanos() / one.as_nanos()).clamp(1, 1_000_000))
+        .expect("batch size is at most one million");
     let mut per_call: Vec<Duration> = (0..settings.samples.max(1))
         .map(|_| {
-            let start = Instant::now();
+            let start = now();
             for _ in 0..batch {
                 run();
             }
-            start.elapsed() / batch
+            now().duration_since(start) / batch
         })
         .collect();
     per_call.sort();
@@ -91,33 +98,42 @@ pub fn time(case: &mut Case, settings: Settings) -> Timing {
         group: case.group,
         name: case.name,
         budget: case.budget,
-        calls: u64::from(batch) * n as u64 + 2,
+        calls: u64::from(batch) * u64::try_from(n).expect("the sample count comes from a u32") + 2,
         median: per_call[n / 2],
         p95: per_call[(n * 95 / 100).min(n - 1)],
         min: per_call[0],
     }
 }
 
-pub fn run_all(settings: Settings) -> Vec<Timing> {
-    let mut timings: Vec<Timing> = cases::all()
+pub(crate) fn run_all(settings: Settings) -> Result<Vec<Timing>, String> {
+    let mut timings: Vec<Timing> = cases::all()?
         .iter_mut()
         .map(|case| time(case, settings))
         .collect();
     timings.extend(render::timings(settings));
-    timings
+    Ok(timings)
 }
 
-pub fn format_duration(d: Duration) -> String {
+pub(crate) fn format_duration(d: Duration) -> String {
     let ns = d.as_nanos();
     match ns {
         0..1_000 => format!("{ns} ns"),
-        1_000..1_000_000 => format!("{:.1} us", ns as f64 / 1e3),
-        1_000_000..1_000_000_000 => format!("{:.2} ms", ns as f64 / 1e6),
-        _ => format!("{:.2} s", ns as f64 / 1e9),
+        1_000..1_000_000 => format!(
+            "{:.1} us",
+            ns.to_f64().expect("Duration nanoseconds fit the f64 range") / 1e3
+        ),
+        1_000_000..1_000_000_000 => format!(
+            "{:.2} ms",
+            ns.to_f64().expect("Duration nanoseconds fit the f64 range") / 1e6
+        ),
+        _ => format!(
+            "{:.2} s",
+            ns.to_f64().expect("Duration nanoseconds fit the f64 range") / 1e9
+        ),
     }
 }
 
-pub fn report(timings: &[Timing], out: &mut dyn Write) -> std::io::Result<()> {
+pub(crate) fn report(timings: &[Timing], out: &mut dyn Write) -> std::io::Result<()> {
     writeln!(
         out,
         "Heartwire {} ({}) {} performance, {} build",
@@ -153,7 +169,7 @@ pub fn report(timings: &[Timing], out: &mut dyn Write) -> std::io::Result<()> {
     writeln!(out, "{} cases, {over} over budget", timings.len())
 }
 
-pub fn requested() -> Option<Option<PathBuf>> {
+pub(crate) fn requested() -> Option<Option<PathBuf>> {
     let mut args = std::env::args().skip_while(|a| a != FLAG);
     args.next()?;
     Some(
@@ -163,47 +179,47 @@ pub fn requested() -> Option<Option<PathBuf>> {
     )
 }
 
-pub fn main(target: Option<PathBuf>) {
-    let timings = run_all(Settings::FULL);
+pub(crate) fn main(target: Option<PathBuf>) -> Result<(), String> {
+    let timings = run_all(Settings::FULL)?;
     let mut text = Vec::new();
-    let _ = report(&timings, &mut text);
+    report(&timings, &mut text)
+        .map_err(|error| format!("format the performance report: {error}"))?;
     match target {
-        Some(path) => {
-            if let Err(error) = std::fs::write(&path, &text) {
-                eprintln!("writing {}: {error}", path.display());
-            }
-        }
-        None => {
-            let _ = std::io::stdout().write_all(&text);
-        }
+        Some(path) => std::fs::write(&path, &text)
+            .map_err(|error| format!("writing {}: {error}", path.display())),
+        None => std::io::stdout()
+            .lock()
+            .write_all(&text)
+            .map_err(|error| format!("write the performance report to stdout: {error}")),
     }
+}
+
+pub fn check_performance() -> Result<(), String> {
+    check::run()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn every_case_runs_and_reports() {
-        let timings = run_all(Settings::QUICK);
-        assert!(timings.len() >= 30, "{} cases", timings.len());
-        let mut names: Vec<(&str, &str)> = timings.iter().map(|t| (t.group, t.name)).collect();
-        names.sort();
-        names.dedup();
-        assert_eq!(names.len(), timings.len(), "case names are unique");
-        for t in &timings {
-            assert!(t.calls >= 3, "{} ran", t.name);
-            assert!(
-                t.min <= t.median && t.median <= t.p95,
-                "{} is ordered",
-                t.name
-            );
+    struct BrokenOutput;
+
+    impl Write for BrokenOutput {
+        fn write(&mut self, _buffer: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::ErrorKind::BrokenPipe.into())
         }
-        let mut text = Vec::new();
-        report(&timings, &mut text).unwrap();
-        let text = String::from_utf8(text).unwrap();
-        assert!(text.contains("osc"));
-        assert!(text.lines().count() == timings.len() + 3);
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_report_returns_output_failures() {
+        assert_eq!(
+            report(&[], &mut BrokenOutput).unwrap_err().kind(),
+            std::io::ErrorKind::BrokenPipe
+        );
     }
 
     #[test]
@@ -215,38 +231,15 @@ mod tests {
     }
 
     #[test]
-    fn hidden_and_partial_frames_stay_cheaper_than_full_ones() {
-        let timings = render::timings(Settings {
-            per_case: Duration::from_millis(20),
-            samples: 5,
-        });
-        let median = |name: &str| {
-            timings
-                .iter()
-                .find(|t| t.name == name)
-                .unwrap_or_else(|| panic!("{name} was timed"))
-                .median
-        };
-        let shown = median("ping animation frame");
-        let hidden = median("ping frame while minimized");
-        assert!(
-            hidden * 20 < shown,
-            "a minimized tick took {hidden:?}, an on-screen ping frame {shown:?}"
-        );
-        let partial = median("VR panel frame after a bpm change");
-        let fresh = median("VR panel create and first frame");
-        assert!(
-            partial * 2 < fresh,
-            "a partial panel frame took {partial:?}, a fresh one {fresh:?}"
-        );
-    }
-
-    #[test]
     fn a_slow_case_is_flagged() {
-        let mut case = Case::new("test", "sleep", Duration::from_micros(1), || {
-            std::thread::sleep(Duration::from_millis(1));
+        let elapsed = std::rc::Rc::new(std::cell::Cell::new(Duration::ZERO));
+        let clock = std::rc::Rc::clone(&elapsed);
+        let mut case = Case::new("test", "sleep", Duration::from_micros(1), move || {
+            elapsed.set(elapsed.get() + Duration::from_millis(1));
         });
-        let timing = time(&mut case, Settings::QUICK);
+        let start = Instant::now();
+        let timing = time_with(&mut case, Settings::QUICK, || start + clock.get());
         assert!(timing.over_budget());
+        assert_eq!(timing.median, Duration::from_millis(1));
     }
 }

@@ -23,11 +23,11 @@ fn welcome_buttons_reach_the_app() {
     let imported = Rc::new(Cell::new(0));
     let skipped = Rc::new(Cell::new(0));
     {
-        let imported = imported.clone();
+        let imported = std::rc::Rc::clone(&imported);
         welcome.on_import_hr_osc(move || imported.set(imported.get() + 1));
     }
     {
-        let skipped = skipped.clone();
+        let skipped = std::rc::Rc::clone(&skipped);
         welcome.on_skip(move || skipped.set(skipped.get() + 1));
     }
     render(&app);
@@ -54,7 +54,18 @@ fn welcome_text_is_centred() {
     let frame = render(&app);
     for id in ["WelcomePage::title", "WelcomePage::message"] {
         let ink = ink_in(&frame, rect(&one(&app, id)), 0.0).expect("text is drawn");
-        let centre = (ink.x0 + ink.x1) as f32 / 2.0;
-        assert_near(id, centre, WIDTH as f32 / 2.0, 1.5);
+        let centre = (ink.x0 + ink.x1)
+            .to_f32()
+            .expect("pixel coordinates fit the f32 range")
+            / 2.0;
+        assert_near(
+            id,
+            centre,
+            (WIDTH)
+                .to_f32()
+                .expect("pixel coordinates fit the f32 range")
+                / 2.0,
+            1.5,
+        );
     }
 }

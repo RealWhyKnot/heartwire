@@ -35,6 +35,7 @@ fn taskbars() -> Vec<RECT> {
         let class = wide(class);
         let mut after: HWND = std::ptr::null_mut();
         loop {
+            // SAFETY: class is terminated UTF-16 and after is null or the previous enumeration handle.
             let bar = unsafe {
                 FindWindowExW(
                     std::ptr::null_mut(),
@@ -52,6 +53,7 @@ fn taskbars() -> Vec<RECT> {
                 right: 0,
                 bottom: 0,
             };
+            // SAFETY: rect is writable and bar is the nonnull handle returned by window enumeration.
             if unsafe { GetWindowRect(bar, &mut rect) } != 0
                 && rect.right > rect.left
                 && rect.bottom > rect.top
@@ -66,7 +68,12 @@ fn taskbars() -> Vec<RECT> {
 
 fn capture(rect: &RECT) -> Vec<u8> {
     let (w, h) = (rect.right - rect.left, rect.bottom - rect.top);
-    let mut pixels = vec![0u8; (w * h * 4) as usize];
+    let mut pixels = vec![
+        0u8;
+        usize::try_from(w * h * 4)
+            .expect("the taskbar rectangle has positive dimensions")
+    ];
+    // SAFETY: the positive rectangle sizes the writable BGRA buffer; GDI objects are released after use.
     unsafe {
         let screen = GetDC(std::ptr::null_mut());
         let memory = CreateCompatibleDC(screen);
@@ -74,7 +81,8 @@ fn capture(rect: &RECT) -> Vec<u8> {
         let old = SelectObject(memory, bitmap);
         BitBlt(memory, 0, 0, w, h, screen, rect.left, rect.top, SRCCOPY);
         let mut info: BITMAPINFO = std::mem::zeroed();
-        info.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
+        info.bmiHeader.biSize = u32::try_from(std::mem::size_of::<BITMAPINFOHEADER>())
+            .expect("BITMAPINFOHEADER has a fixed DWORD size");
         info.bmiHeader.biWidth = w;
         info.bmiHeader.biHeight = -h;
         info.bmiHeader.biPlanes = 1;
@@ -84,7 +92,7 @@ fn capture(rect: &RECT) -> Vec<u8> {
             memory,
             bitmap,
             0,
-            h as u32,
+            u32::try_from(h).expect("the taskbar rectangle has positive height"),
             pixels.as_mut_ptr().cast(),
             &mut info,
             DIB_RGB_COLORS,
@@ -130,8 +138,10 @@ impl Drop for Scratch {
 }
 
 fn start_menu_shortcut(name: &str, target: &Path) -> PathBuf {
-    let dir = PathBuf::from(std::env::var_os("APPDATA").unwrap())
-        .join(r"Microsoft\Windows\Start Menu\Programs");
+    let dir = PathBuf::from(
+        std::env::var_os("APPDATA").expect("the interactive Windows profile defines APPDATA"),
+    )
+    .join(r"Microsoft\Windows\Start Menu\Programs");
     let link = dir.join(format!("{name}.lnk"));
     let script = format!(
         "$s=(New-Object -ComObject WScript.Shell).CreateShortcut('{}'); $s.TargetPath='{}'; $s.Save()",
@@ -141,7 +151,7 @@ fn start_menu_shortcut(name: &str, target: &Path) -> PathBuf {
     let status = Command::new("powershell.exe")
         .args(["-NoProfile", "-Command", &script])
         .status()
-        .unwrap();
+        .expect("PowerShell is available on the interactive Windows desktop");
     assert!(status.success(), "creating {}", link.display());
     link
 }
@@ -161,6 +171,7 @@ fn post(port: u16, bpm: u16) -> bool {
 #[test]
 #[ignore = "needs an interactive Windows desktop with a visible taskbar"]
 fn the_taskbar_icon_beats_when_a_start_menu_shortcut_points_at_the_exe() {
+    // SAFETY: the DPI context is the SDK's predefined process-awareness constant.
     unsafe { SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let source = std::env::var_os("HEARTWIRE_EXE")
         .map(PathBuf::from)
@@ -176,7 +187,7 @@ fn the_taskbar_icon_beats_when_a_start_menu_shortcut_points_at_the_exe() {
     std::fs::create_dir_all(&data).unwrap();
     let in_place = std::env::var_os("HEARTWIRE_IN_PLACE").is_some();
     let exe = if in_place {
-        source.clone()
+        source
     } else {
         let install = root.join("Heartwire");
         std::fs::create_dir_all(&install).unwrap();
@@ -227,7 +238,7 @@ fn the_taskbar_icon_beats_when_a_start_menu_shortcut_points_at_the_exe() {
     }
     let feeding = Arc::new(AtomicBool::new(true));
     let feeder = {
-        let feeding = feeding.clone();
+        let feeding = std::sync::Arc::clone(&feeding);
         std::thread::spawn(move || {
             while feeding.load(Ordering::Relaxed) {
                 post(port, 120);
@@ -271,12 +282,14 @@ fn the_taskbar_icon_beats_when_a_start_menu_shortcut_points_at_the_exe() {
         .windows(2)
         .filter(|w| w[0] < most / 2 && w[1] >= most / 2)
         .count();
-    eprintln!(
+    writeln!(
+        std::io::stderr().lock(),
         "{packets} OSC packets, {} frames, beat-colour pixels {least}..{most}, rising edges {flashes}, lit frames {lit}, dark frames {dark}, still-colour pixels {}..{}",
         beat.len(),
         still.iter().min().unwrap_or(&0),
         still.iter().max().unwrap_or(&0)
-    );
+    )
+    .unwrap_or_else(|error| panic!("failed printing to stderr: {error}"));
     assert!(
         most >= 20 && lit >= 2 && dark >= 2,
         "the taskbar icon did not beat: beat-colour pixels per frame {beat:?}"

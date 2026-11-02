@@ -1,14 +1,46 @@
 use super::*;
 use std::net::UdpSocket;
-use std::sync::{Arc, Mutex, mpsc};
+use std::sync::{Arc, Condvar, Mutex, mpsc};
 
 #[derive(Clone, Default)]
-struct Recorder(Arc<Mutex<Vec<View>>>);
+struct Recorder(Arc<Mutex<Vec<View>>>, Arc<Condvar>);
 
 impl Ui for Recorder {
     fn show(&self, view: &View) {
         self.0.lock().unwrap().push(view.clone());
+        self.1.notify_all();
     }
+}
+
+impl Recorder {
+    fn wait_for(&self, predicate: impl Fn(&View) -> bool) {
+        let (views, _) = self
+            .1
+            .wait_timeout_while(self.0.lock().unwrap(), Duration::from_secs(5), |views| {
+                !views.iter().any(&predicate)
+            })
+            .unwrap();
+        assert!(views.iter().any(predicate));
+    }
+}
+
+fn run_with_timeout(config: Config, rx: &Receiver<Event>, tx: Sender<Event>, ui: impl Ui) {
+    let now = std::cell::Cell::new(Instant::now());
+    run_with(
+        config,
+        tx,
+        ui,
+        || now.get(),
+        |wait| match rx.try_recv() {
+            Ok(event) => Ok(event),
+            Err(mpsc::TryRecvError::Disconnected) => Err(RecvTimeoutError::Disconnected),
+            Err(mpsc::TryRecvError::Empty) if wait < Duration::from_secs(3600) => {
+                now.set(now.get() + wait);
+                Err(RecvTimeoutError::Timeout)
+            }
+            Err(mpsc::TryRecvError::Empty) => rx.recv_timeout(Duration::from_secs(5)),
+        },
+    );
 }
 
 fn decode(packet: &[u8]) -> (String, Arg) {
@@ -51,7 +83,7 @@ fn readings_reach_osc_and_time_out() {
     let ui = Recorder::default();
     let seen = ui.clone();
     let engine_tx = tx.clone();
-    let worker = std::thread::spawn(move || run(config, rx, engine_tx, ui));
+    let worker = std::thread::spawn(move || run_with_timeout(config, &rx, engine_tx, ui));
     tx.send(Event::Reading {
         generation: 1,
         bpm: 100,
@@ -90,6 +122,7 @@ fn readings_reach_osc_and_time_out() {
     );
     assert!(!views.last().unwrap().connected);
     assert!(views.iter().all(|v| v.bpm != 55));
+    drop(views);
 }
 
 fn device(name: &str) -> crate::sources::Device {
@@ -107,11 +140,18 @@ struct Running {
 
 impl Running {
     fn start(config: Config) -> Running {
+        Self::start_with(config, run)
+    }
+
+    fn start_with(
+        config: Config,
+        run: fn(Config, &Receiver<Event>, Sender<Event>, Recorder),
+    ) -> Running {
         let (tx, rx) = mpsc::channel();
         let seen = Recorder::default();
         let ui = seen.clone();
         let engine_tx = tx.clone();
-        let worker = std::thread::spawn(move || run(config, rx, engine_tx, ui));
+        let worker = std::thread::spawn(move || run(config, &rx, engine_tx, ui));
         Running { tx, seen, worker }
     }
 
@@ -293,25 +333,32 @@ fn a_post_to_the_http_source_reaches_vrchat_then_times_out() {
         .local_addr()
         .unwrap()
         .port();
-    let engine = Running::start(Config {
-        service_type: Service::Http,
-        http_server_port: port,
-        osc_client_port: vrchat.local_addr().unwrap().port(),
-        connected_timeout: 1,
-        max_heart_rate: 200,
-        ..Config::default()
-    });
+    let engine = Running::start_with(
+        Config {
+            service_type: Service::Http,
+            http_server_port: port,
+            osc_client_port: vrchat.local_addr().unwrap().port(),
+            connected_timeout: 1,
+            max_heart_rate: 200,
+            ..Config::default()
+        },
+        run_with_timeout,
+    );
+    engine
+        .seen
+        .wait_for(|view| view.status == format!("Listening on port {port}"));
     let mut reply = String::new();
-    for _ in 0..100 {
-        if let Ok(mut stream) = TcpStream::connect(("127.0.0.1", port)) {
-            stream
-                .write_all(b"POST / HTTP/1.1\r\nContent-Length: 3\r\n\r\n150")
-                .unwrap();
-            stream.read_to_string(&mut reply).unwrap();
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(20));
-    }
+    let mut stream = TcpStream::connect(("127.0.0.1", port)).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    stream
+        .set_write_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    stream
+        .write_all(b"POST / HTTP/1.1\r\nContent-Length: 3\r\n\r\n150")
+        .unwrap();
+    stream.read_to_string(&mut reply).unwrap();
     assert!(reply.starts_with("HTTP/1.1 200 OK"), "{reply}");
     let mut buf = [0u8; 128];
     let mut packets = Vec::new();

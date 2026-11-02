@@ -9,9 +9,9 @@ use crate::config::{Config, Service};
 use crate::osc::{self, Arg};
 use crate::sources;
 
-pub use view::{Event, Ui, View, percent};
+pub(crate) use view::{Event, Ui, View, percent};
 
-struct Engine<U: Ui> {
+struct Engine<U: Ui, N: Fn() -> Instant> {
     config: Config,
     osc: osc::Sender,
     tx: Sender<Event>,
@@ -20,9 +20,10 @@ struct Engine<U: Ui> {
     generation: u64,
     source: Option<sources::Handle>,
     last: Instant,
+    now: N,
 }
 
-impl<U: Ui> Engine<U> {
+impl<U: Ui, N: Fn() -> Instant> Engine<U, N> {
     fn start_source(&mut self) {
         self.generation += 1;
         self.source = Some(sources::spawn(
@@ -49,7 +50,7 @@ impl<U: Ui> Engine<U> {
     }
 
     fn reading(&mut self, bpm: u16) {
-        self.last = Instant::now();
+        self.last = (self.now)();
         let percent = percent(bpm, self.config.max_heart_rate);
         self.osc
             .send(&self.config.osc_path_percent, Arg::Float(percent));
@@ -111,11 +112,11 @@ impl<U: Ui> Engine<U> {
                 self.ui.show(&self.view);
                 match sources::pico::install(&port, &self.config.pico_strap_name) {
                     Ok(()) => {
-                        crate::log::write(&format!("firmware installed on {port}"));
+                        tracing::info!(port = %port, "firmware installed on {port}");
                         format!("Installed on {port}")
                     }
                     Err(error) => {
-                        crate::log::write(&format!("firmware install on {port}: {error}"));
+                        tracing::warn!(error = %error, port = %port, "firmware install on {port}: {error}");
                         format!("Install failed: {error}")
                     }
                 }
@@ -130,7 +131,17 @@ impl<U: Ui> Engine<U> {
     }
 }
 
-pub fn run(config: Config, rx: Receiver<Event>, tx: Sender<Event>, ui: impl Ui) {
+pub(crate) fn run(config: Config, rx: &Receiver<Event>, tx: Sender<Event>, ui: impl Ui) {
+    run_with(config, tx, ui, Instant::now, |wait| rx.recv_timeout(wait));
+}
+
+fn run_with(
+    config: Config,
+    tx: Sender<Event>,
+    ui: impl Ui,
+    now: impl Fn() -> Instant,
+    mut receive: impl FnMut(Duration) -> Result<Event, RecvTimeoutError>,
+) {
     let target = osc::resolve(&config.osc_client_host, config.osc_client_port);
     let mut engine = Engine {
         config,
@@ -140,17 +151,18 @@ pub fn run(config: Config, rx: Receiver<Event>, tx: Sender<Event>, ui: impl Ui) 
         view: View::default(),
         generation: 0,
         source: None,
-        last: Instant::now(),
+        last: now(),
+        now,
     };
     engine.start_source();
     engine.ui.show(&engine.view);
     loop {
         let wait = if engine.view.connected {
-            (engine.last + engine.timeout()).saturating_duration_since(Instant::now())
+            (engine.last + engine.timeout()).saturating_duration_since((engine.now)())
         } else {
             Duration::from_secs(3600)
         };
-        match rx.recv_timeout(wait) {
+        match receive(wait) {
             Ok(Event::Reading { generation, bpm }) if generation == engine.generation => {
                 engine.reading(bpm);
             }
@@ -175,7 +187,9 @@ pub fn run(config: Config, rx: Receiver<Event>, tx: Sender<Event>, ui: impl Ui) 
             Ok(Event::Quit) | Err(RecvTimeoutError::Disconnected) => break,
             Ok(_) => {}
             Err(RecvTimeoutError::Timeout) => {
-                if engine.view.connected && engine.last.elapsed() >= engine.timeout() {
+                if engine.view.connected
+                    && (engine.now)().duration_since(engine.last) >= engine.timeout()
+                {
                     engine.set_connected(false);
                     engine.ui.show(&engine.view);
                 }

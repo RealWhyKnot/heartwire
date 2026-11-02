@@ -6,23 +6,24 @@ mod openvr;
 pub(crate) mod panel;
 #[cfg(windows)]
 mod registration;
+#[cfg(any(windows, test))]
 mod supervisor;
 
+#[cfg(windows)]
 use std::path::PathBuf;
-use std::sync::mpsc::Sender;
 
 #[cfg(windows)]
-pub const APP_KEY: &str = "dev.whyknot.heartwire";
+pub(crate) const APP_KEY: &str = "dev.whyknot.heartwire";
 
-pub const LAUNCH_FLAG: &str = "--steamvr";
+pub(crate) const LAUNCH_FLAG: &str = "--steamvr";
 
-pub const REGISTER_FLAG: &str = "--register-steamvr";
+pub(crate) const REGISTER_FLAG: &str = "--register-steamvr";
 
-pub const UNREGISTER_FLAG: &str = "--unregister-steamvr";
+pub(crate) const UNREGISTER_FLAG: &str = "--unregister-steamvr";
 
-pub const SUPPORTED: bool = cfg!(windows);
+pub(crate) const SUPPORTED: bool = cfg!(windows);
 
-pub fn setup_command(register: bool, data_dir: &std::path::Path) -> i32 {
+pub(crate) fn setup_command(register: bool, data_dir: &std::path::Path) -> i32 {
     #[cfg(windows)]
     {
         if register {
@@ -39,45 +40,72 @@ pub fn setup_command(register: bool, data_dir: &std::path::Path) -> i32 {
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct PanelView {
+pub(crate) struct PanelView {
     pub connected: bool,
     pub bpm: u16,
     pub percent: String,
     pub status: String,
 }
 
-#[cfg_attr(not(windows), allow(dead_code))]
-pub enum Msg {
+#[cfg(any(windows, test))]
+pub(crate) enum Msg {
     Enable(bool),
     View(PanelView),
     Quit,
 }
 
-pub struct Handle {
-    tx: Sender<Msg>,
+#[derive(Clone)]
+pub(crate) struct Sender {
+    #[cfg(windows)]
+    inner: std::sync::mpsc::Sender<Msg>,
+}
+
+impl Sender {
+    pub(crate) fn enable(&self, enabled: bool) {
+        #[cfg(windows)]
+        let _ = self.inner.send(Msg::Enable(enabled));
+        #[cfg(not(windows))]
+        let _ = enabled;
+    }
+
+    pub(crate) fn view(&self, view: PanelView) {
+        #[cfg(windows)]
+        let _ = self.inner.send(Msg::View(view));
+        #[cfg(not(windows))]
+        drop(view);
+    }
+}
+
+pub(crate) struct Handle {
+    tx: Sender,
+    #[cfg(windows)]
     thread: Option<std::thread::JoinHandle<()>>,
 }
 
 impl Handle {
-    pub fn sender(&self) -> Sender<Msg> {
+    pub(crate) fn sender(&self) -> Sender {
         self.tx.clone()
     }
 }
 
+#[cfg(windows)]
 impl Drop for Handle {
     fn drop(&mut self) {
-        let _ = self.tx.send(Msg::Quit);
+        let _ = self.tx.inner.send(Msg::Quit);
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
         }
     }
 }
 
-#[cfg_attr(not(windows), allow(dead_code))]
-pub struct Options {
+pub(crate) struct Options {
+    #[cfg(any(windows, test))]
     pub enabled: bool,
+    #[cfg(any(windows, test))]
     pub registered: bool,
+    #[cfg(windows)]
     pub data_dir: PathBuf,
+    #[cfg(any(windows, test))]
     pub launched: bool,
 }
 
@@ -111,11 +139,12 @@ impl<R: Fn(bool)> supervisor::Runtime for SteamVr<R> {
     }
 }
 
-pub fn start(
+pub(crate) fn start(
     options: Options,
     on_registered: impl Fn(bool) + Send + 'static,
     on_quit: impl Fn() + Send + 'static,
 ) -> Handle {
+    #[cfg(windows)]
     let (tx, rx) = std::sync::mpsc::channel();
     #[cfg(windows)]
     let thread = std::thread::Builder::new()
@@ -129,11 +158,15 @@ pub fn start(
         })
         .ok();
     #[cfg(not(windows))]
-    let thread = {
-        drop((options, rx, on_registered, on_quit));
-        None
-    };
-    Handle { tx, thread }
+    let _ = (options, on_registered, on_quit);
+    Handle {
+        tx: Sender {
+            #[cfg(windows)]
+            inner: tx,
+        },
+        #[cfg(windows)]
+        thread,
+    }
 }
 
 #[cfg(all(test, windows))]

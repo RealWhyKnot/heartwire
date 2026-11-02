@@ -9,13 +9,13 @@ use serialport::{SerialPort, SerialPortInfo, SerialPortType};
 
 use super::Context;
 
-pub use firmware::{FIRMWARE_MAIN, install, write_file_script};
-pub use lines::{LineBuffer, PicoLine, note_text, parse_pico_line};
-pub use watch::PortWatch;
+pub(crate) use firmware::{FIRMWARE_MAIN, install, write_file_script};
+pub(crate) use lines::{LineBuffer, PicoLine, note_text, parse_pico_line};
+pub(crate) use watch::PortWatch;
 
-pub const RP2_VID: u16 = 0x2E8A;
+pub(crate) const RP2_VID: u16 = 0x2E8A;
 
-pub const MICROPYTHON_PID: u16 = 0x0005;
+pub(crate) const MICROPYTHON_PID: u16 = 0x0005;
 
 const BAUD: u32 = 115_200;
 
@@ -26,7 +26,7 @@ const TIMING: link::Timing = link::Timing {
     backlog: Duration::from_millis(300),
 };
 
-pub fn pick(ports: &[SerialPortInfo]) -> Option<String> {
+pub(crate) fn pick(ports: &[SerialPortInfo]) -> Option<String> {
     let usb = |p: &&SerialPortInfo| match &p.port_type {
         SerialPortType::UsbPort(info) => Some((info.vid, info.pid)),
         _ => None,
@@ -42,11 +42,11 @@ pub fn pick(ports: &[SerialPortInfo]) -> Option<String> {
         .map(|p| p.port_name.clone())
 }
 
-pub fn find_port() -> Option<String> {
+pub(crate) fn find_port() -> Option<String> {
     pick(&serialport::available_ports().ok()?)
 }
 
-pub fn run(ctx: &Context) {
+pub(crate) fn run(ctx: &Context) {
     let mut watch = PortWatch::default();
     while !ctx.stopped() {
         match watch.find() {
@@ -70,7 +70,7 @@ fn open(port: &str) -> serialport::Result<Box<dyn SerialPort>> {
     Ok(serial)
 }
 
-pub fn session(ctx: &Context, port: &str) {
+pub(crate) fn session(ctx: &Context, port: &str) {
     let mut serial = match open(port) {
         Ok(serial) => serial,
         Err(error) => {
@@ -83,7 +83,7 @@ pub fn session(ctx: &Context, port: &str) {
     let _ = crate::log::write_changed(&format!("pico opened {port}"));
     ctx.status(format!("Pico on {port}"));
     if let Err(error) = link::pump(ctx, port, &mut *serial, TIMING) {
-        crate::log::write(&format!("pico {port} lost: {error}"));
+        tracing::warn!(error = %error, port = %port, "pico {port} lost: {error}");
         ctx.status("Pico unplugged, waiting");
         ctx.sleep(RETRY);
     }

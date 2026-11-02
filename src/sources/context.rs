@@ -12,7 +12,7 @@ use futures::task::AtomicWaker;
 use super::Device;
 use crate::engine::Event;
 
-pub enum Wake {
+pub(crate) enum Wake {
     None,
     Connect(SocketAddr),
     Shutdown(TcpStream),
@@ -31,7 +31,7 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 #[derive(Clone)]
-pub struct Context {
+pub(crate) struct Context {
     generation: u64,
     tx: Sender<Event>,
     shared: Arc<Shared>,
@@ -52,14 +52,14 @@ impl Context {
         }
     }
 
-    pub fn reading(&self, bpm: u16) {
+    pub(crate) fn reading(&self, bpm: u16) {
         let _ = self.tx.send(Event::Reading {
             generation: self.generation,
             bpm,
         });
     }
 
-    pub fn status(&self, text: impl Into<String>) {
+    pub(crate) fn status(&self, text: impl Into<String>) {
         let text = text.into();
         {
             let mut last = lock(&self.shared.status);
@@ -74,27 +74,36 @@ impl Context {
         });
     }
 
-    pub fn devices(&self, list: Vec<Device>) {
+    pub(crate) fn devices(&self, list: Vec<Device>) {
         let _ = self.tx.send(Event::Devices {
             generation: self.generation,
             list,
         });
     }
 
-    pub fn stopped(&self) -> bool {
+    pub(crate) fn stopped(&self) -> bool {
         self.shared.stopped.load(Ordering::Acquire)
     }
 
-    pub fn sleep(&self, duration: Duration) -> bool {
-        let guard = lock(&self.shared.lock);
+    pub(crate) fn sleep(&self, duration: Duration) -> bool {
+        self.sleep_after(duration, || {})
+    }
+
+    fn sleep_after(&self, duration: Duration, before_wait: impl FnOnce()) -> bool {
+        let mut before_wait = Some(before_wait);
         let _ = self
             .shared
             .signal
-            .wait_timeout_while(guard, duration, |_| !self.stopped());
+            .wait_timeout_while(lock(&self.shared.lock), duration, |_| {
+                if let Some(before_wait) = before_wait.take() {
+                    before_wait();
+                }
+                !self.stopped()
+            });
         self.stopped()
     }
 
-    pub async fn stop_signal(&self) {
+    pub(crate) async fn stop_signal(&self) {
         poll_fn(|cx| {
             if self.stopped() {
                 return Poll::Ready(());
@@ -109,21 +118,22 @@ impl Context {
         .await;
     }
 
-    pub fn set_wake(&self, wake: Wake) {
+    pub(crate) fn set_wake(&self, wake: Wake) {
         let mut slot = lock(&self.shared.lock);
         *slot = wake;
         if self.stopped() {
             fire(&mut slot);
         }
+        drop(slot);
     }
 
     pub(super) fn stopper(&self) -> Stopper {
         Stopper {
-            shared: self.shared.clone(),
+            shared: std::sync::Arc::clone(&self.shared),
         }
     }
 
-    pub fn standalone() -> (Context, std::sync::mpsc::Receiver<Event>, Stopper) {
+    pub(crate) fn standalone() -> (Context, std::sync::mpsc::Receiver<Event>, Stopper) {
         let (tx, rx) = std::sync::mpsc::channel();
         let ctx = Context::new(1, tx);
         let stopper = ctx.stopper();
@@ -131,7 +141,7 @@ impl Context {
     }
 
     #[cfg(test)]
-    pub fn test() -> (Context, std::sync::mpsc::Receiver<Event>, Stopper) {
+    pub(crate) fn test() -> (Context, std::sync::mpsc::Receiver<Event>, Stopper) {
         Context::standalone()
     }
 }
@@ -148,12 +158,12 @@ fn fire(wake: &mut Wake) {
     }
 }
 
-pub struct Stopper {
+pub(crate) struct Stopper {
     shared: Arc<Shared>,
 }
 
 impl Stopper {
-    pub fn stop(&self) {
+    pub(crate) fn stop(&self) {
         self.shared.stopped.store(true, Ordering::Release);
         let mut slot = lock(&self.shared.lock);
         fire(&mut slot);
@@ -163,13 +173,13 @@ impl Stopper {
     }
 }
 
-pub struct Handle {
+pub(crate) struct Handle {
     pub(super) stopper: Stopper,
     pub(super) thread: Option<JoinHandle<()>>,
 }
 
 impl Handle {
-    pub fn stop(mut self) {
+    pub(crate) fn stop(mut self) {
         self.stopper.stop();
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
@@ -180,13 +190,18 @@ impl Handle {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Instant;
+    use std::future::Future;
 
     fn statuses(rx: &std::sync::mpsc::Receiver<Event>) -> Vec<String> {
         rx.try_iter()
             .filter_map(|e| match e {
                 Event::Status { text, .. } => Some(text),
-                _ => None,
+                Event::Reading { .. }
+                | Event::Devices { .. }
+                | Event::Config(_)
+                | Event::Restart
+                | Event::InstallFirmware
+                | Event::Quit => None,
             })
             .collect()
     }
@@ -207,36 +222,28 @@ mod tests {
     #[test]
     fn stop_wakes_a_sleeping_source_at_once() {
         let (ctx, _rx, stop) = Context::test();
+        let (waiting, started) = std::sync::mpsc::channel();
+        let (finished, done) = std::sync::mpsc::channel();
         let worker = std::thread::spawn(move || {
-            let start = Instant::now();
-            assert!(ctx.sleep(Duration::from_secs(30)));
-            start.elapsed()
+            assert!(ctx.sleep_after(Duration::from_secs(30), || {
+                waiting.send(()).unwrap();
+            }));
+            finished.send(()).unwrap();
         });
-        std::thread::sleep(Duration::from_millis(20));
+        started.recv().unwrap();
         stop.stop();
-        assert!(worker.join().unwrap() < Duration::from_secs(1));
+        done.recv_timeout(Duration::from_secs(1)).unwrap();
+        worker.join().unwrap();
     }
 
     #[test]
     fn stop_wakes_the_async_signal_at_once() {
         let (ctx, _rx, stop) = Context::test();
-        let worker = std::thread::spawn(move || {
-            let runtime = tokio::runtime::Builder::new_current_thread()
-                .enable_time()
-                .build()
-                .unwrap();
-            let start = Instant::now();
-            runtime.block_on(async {
-                tokio::select! {
-                    _ = ctx.stop_signal() => {}
-                    _ = tokio::time::sleep(Duration::from_secs(30)) => panic!("stop was missed"),
-                }
-            });
-            start.elapsed()
-        });
-        std::thread::sleep(Duration::from_millis(20));
+        let mut signal = std::pin::pin!(ctx.stop_signal());
+        let mut task = std::task::Context::from_waker(std::task::Waker::noop());
+        assert!(signal.as_mut().poll(&mut task).is_pending());
         stop.stop();
-        assert!(worker.join().unwrap() < Duration::from_secs(1));
+        assert!(signal.as_mut().poll(&mut task).is_ready());
     }
 
     #[test]

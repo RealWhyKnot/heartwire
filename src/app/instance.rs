@@ -1,11 +1,11 @@
 use std::fs::File;
 use std::path::Path;
 
-pub struct Instance {
+pub(super) struct Instance {
     _lock: File,
 }
 
-pub fn acquire(dir: &Path) -> Option<Instance> {
+pub(super) fn acquire(dir: &Path) -> Option<Instance> {
     let _ = std::fs::create_dir_all(dir);
     let lock = File::create(dir.join("heartwire.lock")).ok()?;
     lock.try_lock().ok()?;

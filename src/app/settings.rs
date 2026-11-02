@@ -1,5 +1,4 @@
 use std::rc::Rc;
-use std::sync::mpsc::Sender;
 use std::time::Duration;
 
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
@@ -9,15 +8,17 @@ use super::state::App;
 use crate::config::{Config, Service};
 use crate::engine::{self, Event};
 use crate::ui::{AppWindow, HeartRate, Navigation, Settings, Updates};
-use crate::{log, platform, steamvr, version};
+use crate::{platform, steamvr, version};
 
 const TYPING_PAUSE: Duration = Duration::from_millis(500);
 
-pub fn load(window: &AppWindow, config: &Config) {
+pub(super) fn load(window: &AppWindow, config: &Config) {
     let settings = window.global::<Settings>();
     let services: Vec<SharedString> = Service::ALL.iter().map(|s| s.label().into()).collect();
     settings.set_services(ModelRc::new(VecModel::from(services)));
-    settings.set_service(config.service_type.index() as i32);
+    settings.set_service(
+        i32::try_from(config.service_type.index()).expect("the service list has five entries"),
+    );
     settings.set_connected_timeout(config.connected_timeout.to_string().into());
     settings.set_http_port(config.http_server_port.to_string().into());
     settings.set_widget_id(config.stromno_widget_id.as_str().into());
@@ -39,20 +40,21 @@ pub fn load(window: &AppWindow, config: &Config) {
     heart_rate.set_devices(devices::model(&[], &config.bluetooth_device));
 }
 
-pub fn bind(window: &AppWindow, app: &Rc<App>, vr: Sender<steamvr::Msg>) {
+pub(super) fn bind(window: &AppWindow, app: &Rc<App>, vr: steamvr::Sender) {
     let settings = window.global::<Settings>();
     {
-        let app = app.clone();
+        let app = std::rc::Rc::clone(app);
         settings.on_setting(move |key, value| {
             app.edit(TYPING_PAUSE, |c| c.set(&key, &value));
         });
     }
     {
-        let app = app.clone();
+        let app = std::rc::Rc::clone(app);
         let weak = window.as_weak();
         settings.on_service_picked(move |index| {
-            let service = Service::ALL
-                .get(index as usize)
+            let service = usize::try_from(index)
+                .ok()
+                .and_then(|index| Service::ALL.get(index))
                 .copied()
                 .unwrap_or(Service::Auto);
             app.edit(Duration::ZERO, |c| {
@@ -66,7 +68,7 @@ pub fn bind(window: &AppWindow, app: &Rc<App>, vr: Sender<steamvr::Msg>) {
         });
     }
     {
-        let app = app.clone();
+        let app = std::rc::Rc::clone(app);
         let weak = window.as_weak();
         settings.on_device_picked(move |address| {
             app.edit(Duration::ZERO, |c| {
@@ -84,7 +86,7 @@ pub fn bind(window: &AppWindow, app: &Rc<App>, vr: Sender<steamvr::Msg>) {
         let weak = window.as_weak();
         settings.on_autostart_toggled(move |on| {
             if let Err(error) = platform::set_autostart(on) {
-                log::write(&format!("autostart: {error}"));
+                tracing::error!(error = %error, "autostart: {error}");
             }
             if let Some(w) = weak.upgrade() {
                 w.global::<Settings>()
@@ -93,17 +95,17 @@ pub fn bind(window: &AppWindow, app: &Rc<App>, vr: Sender<steamvr::Msg>) {
         });
     }
     {
-        let app = app.clone();
+        let app = std::rc::Rc::clone(app);
         settings.on_steamvr_toggled(move |on| {
             app.edit(Duration::ZERO, |c| {
                 c.steamvr_autostart = on;
                 true
             });
-            let _ = vr.send(steamvr::Msg::Enable(on));
+            vr.enable(on);
         });
     }
     {
-        let app = app.clone();
+        let app = std::rc::Rc::clone(app);
         settings.on_updates_toggled(move |on| {
             app.edit(Duration::ZERO, |c| {
                 c.check_updates = on;
@@ -112,14 +114,14 @@ pub fn bind(window: &AppWindow, app: &Rc<App>, vr: Sender<steamvr::Msg>) {
         });
     }
     {
-        let app = app.clone();
+        let app = std::rc::Rc::clone(app);
         settings.on_restart_source(move || {
             app.commit(Duration::ZERO);
             app.send(Event::Restart);
         });
     }
     {
-        let app = app.clone();
+        let app = std::rc::Rc::clone(app);
         settings.on_install_firmware(move || app.send(Event::InstallFirmware));
     }
 }

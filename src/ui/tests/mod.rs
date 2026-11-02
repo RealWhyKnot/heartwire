@@ -1,3 +1,5 @@
+use num_traits::ToPrimitive;
+
 mod about;
 mod layout;
 mod reference;
@@ -28,7 +30,7 @@ const INK: u8 = 36;
 thread_local! {
     static WINDOW: Rc<MinimalSoftwareWindow> = {
         let window = MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer);
-        let _ = slint::platform::set_platform(Box::new(TestPlatform { window: window.clone() }));
+        let _ = slint::platform::set_platform(Box::new(TestPlatform { window: std::rc::Rc::clone(&window) }));
         window
     };
     static NOW: Cell<Duration> = const { Cell::new(Duration::ZERO) };
@@ -41,7 +43,7 @@ struct TestPlatform {
 
 impl Platform for TestPlatform {
     fn create_window_adapter(&self) -> Result<Rc<dyn WindowAdapter>, PlatformError> {
-        Ok(self.window.clone())
+        Ok(Rc::<MinimalSoftwareWindow>::clone(&self.window))
     }
 
     fn duration_since_start(&self) -> Duration {
@@ -55,7 +57,11 @@ struct Frame {
 
 impl Frame {
     fn at(&self, x: i32, y: i32) -> [u8; 3] {
-        let p = self.pixels[(y as u32 * WIDTH + x as u32) as usize];
+        let p = self.pixels[usize::try_from(
+            u32::try_from(y).expect("pixel row is nonnegative") * WIDTH
+                + u32::try_from(x).expect("pixel column is nonnegative"),
+        )
+        .expect("frame offsets fit usize")];
         [p.red, p.green, p.blue]
     }
 
@@ -110,7 +116,10 @@ struct Ink {
 
 impl Ink {
     fn center_y(&self) -> f32 {
-        (self.y0 + self.y1) as f32 / 2.0
+        (self.y0 + self.y1)
+            .to_f32()
+            .expect("pixel coordinates fit the f32 range")
+            / 2.0
     }
     fn overlaps(&self, other: &Ink) -> bool {
         self.x0 < other.x1 && other.x0 < self.x1 && self.y0 < other.y1 && other.y0 < self.y1
@@ -157,9 +166,15 @@ fn render(_app: &AppWindow) -> Frame {
     let window = WINDOW.with(Rc::clone);
     slint::platform::update_timers_and_animations();
     window.request_redraw();
-    let mut pixels = vec![Pixel::default(); (WIDTH * HEIGHT) as usize];
+    let mut pixels = vec![
+        Pixel::default();
+        usize::try_from(WIDTH * HEIGHT).expect("the frame dimensions fit usize")
+    ];
     window.draw_if_needed(|renderer| {
-        renderer.render(&mut pixels, WIDTH as usize);
+        renderer.render(
+            &mut pixels,
+            usize::try_from(WIDTH).expect("the window width fits usize"),
+        );
     });
     Frame { pixels }
 }
@@ -229,11 +244,17 @@ fn distance(a: [u8; 3], b: [u8; 3]) -> u8 {
 }
 
 fn clamp_x(v: f32) -> i32 {
-    (v as i32).clamp(0, WIDTH as i32)
+    v.max(0.0)
+        .min(WIDTH.to_f32().expect("window width fits f32"))
+        .to_i32()
+        .expect("clamped window coordinates fit i32")
 }
 
 fn clamp_y(v: f32) -> i32 {
-    (v as i32).clamp(0, HEIGHT as i32)
+    v.max(0.0)
+        .min(HEIGHT.to_f32().expect("window height fits f32"))
+        .to_i32()
+        .expect("clamped window coordinates fit i32")
 }
 
 fn ink_in(frame: &Frame, r: Rect, pad: f32) -> Option<Ink> {
@@ -259,11 +280,17 @@ fn ink_excluding(frame: &Frame, r: Rect, pad: f32, others: &[Rect]) -> Option<In
     }
     let background = counts.into_iter().max_by_key(|(_, n)| *n)?.0;
     let inside = |x: i32, y: i32| {
-        let (fx, fy) = (x as f32 + 0.5, y as f32 + 0.5);
+        let (fx, fy) = (
+            (x).to_f32().expect("pixel coordinates fit the f32 range") + 0.5,
+            (y).to_f32().expect("pixel coordinates fit the f32 range") + 0.5,
+        );
         fx >= r.x && fx < r.right() && fy >= r.y && fy < r.bottom()
     };
     let foreign = |x: i32, y: i32| {
-        let (fx, fy) = (x as f32 + 0.5, y as f32 + 0.5);
+        let (fx, fy) = (
+            (x).to_f32().expect("pixel coordinates fit the f32 range") + 0.5,
+            (y).to_f32().expect("pixel coordinates fit the f32 range") + 0.5,
+        );
         !inside(x, y)
             && others
                 .iter()

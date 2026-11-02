@@ -30,6 +30,41 @@ jobs:
       contents: read
     uses: RealWhyKnot/workflows/.github/workflows/repo-checks.yml@v1
 
+  style:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install check dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s inherit_errexit
+          sudo apt-get update
+          sudo apt-get install -y shellcheck shfmt pkg-config libudev-dev libdbus-1-dev \
+            libssl-dev libfontconfig1-dev libxkbcommon-dev
+          python -m pip install -r requirements-dev.txt
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: Install-PSResource -Name PSScriptAnalyzer -Version 1.25.0 -TrustRepository -Quiet
+
+      - name: Set up Rust
+        uses: RealWhyKnot/workflows/setup-rust@v1
+        with:
+          toolchain: '1.99.1'
+          components: rustfmt, clippy
+          cache-key: cargo-style
+
+      - name: Check style and tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s inherit_errexit
+          bash .githooks/pre-push
+
   build:
     name: ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -45,24 +80,20 @@ jobs:
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
         run: |
+          set -euo pipefail
+          shopt -s inherit_errexit
           sudo apt-get update
           sudo apt-get install -y pkg-config libudev-dev libdbus-1-dev libssl-dev libfontconfig1-dev libxkbcommon-dev
 
       - name: Set up Rust
         uses: RealWhyKnot/workflows/setup-rust@v1
         with:
-          toolchain: stable
+          toolchain: '1.99.1'
           components: rustfmt, clippy
           cache-key: cargo-ci
 
-      - name: Check formatting
-        run: cargo fmt --check
-
-      - name: Lint
-        run: cargo clippy --locked --all-targets -- -D warnings
-
       - name: Test
-        run: cargo test --locked
+        run: cargo test --workspace --all-targets --locked
 
       - name: Install NSIS
         if: runner.os == 'Windows'
@@ -79,10 +110,10 @@ jobs:
           $payload = 'dist/payload'
           New-Item -ItemType Directory -Force (Join-Path $payload 'firmware') | Out-Null
           Copy-Item target/debug/heartwire.exe, README.md, LICENSE, NOTICE.md $payload
-          Copy-Item firmware/main.py, firmware/hr_config.example.py (Join-Path $payload 'firmware')
+          Copy-Item firmware/main.py, firmware/hr_config_example.py (Join-Path $payload 'firmware')
           ./installer/build.ps1 -Payload $payload -Version 0.0.0.0-CI -OutFile dist/heartwire-setup.exe
-          ./installer/test.ps1 -Setup dist/heartwire-setup.exe -Payload $payload -Version 0.0.0.0-CI
+          ./installer/Test-Build.ps1 -Setup dist/heartwire-setup.exe -Payload $payload -Version 0.0.0.0-CI
 
       - name: Check the firmware
         if: runner.os == 'Linux'
-        run: python3 -m py_compile firmware/main.py firmware/hr_config.example.py
+        run: python3 -m py_compile firmware/main.py firmware/hr_config_example.py

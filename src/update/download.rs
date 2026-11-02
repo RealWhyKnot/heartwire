@@ -1,3 +1,5 @@
+use num_traits::ToPrimitive;
+
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -6,7 +8,7 @@ use sha2::{Digest, Sha256};
 
 use super::{Package, Release, agent, asset_url};
 
-pub fn parse_integrity(tsv: &str, archive: &str) -> Result<(String, u64), String> {
+pub(crate) fn parse_integrity(tsv: &str, archive: &str) -> Result<(String, u64), String> {
     let line = tsv
         .lines()
         .map(|l| l.trim_end_matches('\r'))
@@ -35,7 +37,7 @@ pub fn parse_integrity(tsv: &str, archive: &str) -> Result<(String, u64), String
     Ok((hash, size))
 }
 
-pub fn download(
+pub(crate) fn download(
     release: &Release,
     package: Package,
     staging: &Path,
@@ -47,36 +49,69 @@ pub fn download(
     let tsv = agent
         .get(asset_url(release, &integrity)?)
         .call()
-        .map_err(|e| e.to_string())?
+        .map_err(|e| format!("download {integrity}: {e}. Check your connection and try again."))?
         .body_mut()
         .read_to_string()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            format!("read downloaded integrity file {integrity}: {e}. Try the update again.")
+        })?;
     let (hash, size) = parse_integrity(&tsv, &archive)?;
     if staging.exists() {
-        std::fs::remove_dir_all(staging).map_err(|e| e.to_string())?;
+        std::fs::remove_dir_all(staging).map_err(|e| {
+            format!(
+                "clear update staging folder {}: {e}. Check that the folder is writable.",
+                staging.display()
+            )
+        })?;
     }
-    std::fs::create_dir_all(staging).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(staging).map_err(|e| {
+        format!(
+            "create update staging folder {}: {e}. Check that the folder is writable.",
+            staging.display()
+        )
+    })?;
     let path = staging.join(&archive);
     let mut response = agent
         .get(asset_url(release, &archive)?)
         .call()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("download {archive}: {e}. Check your connection and try again."))?;
     let mut reader = response.body_mut().with_config().limit(size + 1).reader();
-    let mut file = File::create(&path).map_err(|e| e.to_string())?;
+    let mut file = File::create(&path).map_err(|e| {
+        format!(
+            "create update file {}: {e}. Check that the folder is writable.",
+            path.display()
+        )
+    })?;
     let mut hasher = Sha256::new();
     let mut buf = vec![0u8; 64 * 1024];
     let mut total = 0u64;
     loop {
-        let n = reader.read(&mut buf).map_err(|e| e.to_string())?;
+        let n = reader.read(&mut buf).map_err(|e| {
+            format!("read download stream for {archive}: {e}. Check your connection and try again.")
+        })?;
         if n == 0 {
             break;
         }
-        file.write_all(&buf[..n]).map_err(|e| e.to_string())?;
+        file.write_all(&buf[..n]).map_err(|e| {
+            format!(
+                "write update file {}: {e}. Check available disk space and folder permissions.",
+                path.display()
+            )
+        })?;
         hasher.update(&buf[..n]);
-        total += n as u64;
-        progress((total as f32 / size as f32).min(1.0));
+        total += u64::try_from(n).expect("the read count is at most the download buffer length");
+        progress(
+            (total.to_f32().expect("u64 byte counts fit the f32 range")
+                / size.to_f32().expect("u64 byte counts fit the f32 range"))
+            .min(1.0),
+        );
     }
-    file.flush().map_err(|e| e.to_string())?;
+    file.flush().map_err(|e| {
+        format!(
+            "flush update file {}: {e}. Check available disk space and try again.",
+            path.display()
+        )
+    })?;
     if total != size {
         return Err(format!("{archive} is {total} bytes, expected {size}"));
     }

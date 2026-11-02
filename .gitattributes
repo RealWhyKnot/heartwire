@@ -3,3 +3,8 @@
 *.ico binary
 *.ttf binary
 *.uf2 binary
+*.sh text eol=lf
+*.bash text eol=lf
+*.sh.tpl text eol=lf
+*.bash.tpl text eol=lf
+.githooks/* text eol=lf

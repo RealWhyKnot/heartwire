@@ -1,9 +1,9 @@
 use crate::heart_rate::MAX_BPM;
 
-pub const MAX_LINE: usize = 256;
+pub(super) const MAX_LINE: usize = 256;
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum PicoLine<'a> {
+pub(crate) enum PicoLine<'a> {
     Reading(u16),
     Note(&'a str),
     Repl,
@@ -11,13 +11,13 @@ pub enum PicoLine<'a> {
 }
 
 #[derive(Default)]
-pub struct LineBuffer {
+pub(crate) struct LineBuffer {
     line: Vec<u8>,
     synced: bool,
 }
 
 impl LineBuffer {
-    pub fn feed(&mut self, bytes: &[u8], mut each: impl FnMut(&[u8])) {
+    pub(crate) fn feed(&mut self, bytes: &[u8], mut each: impl FnMut(&[u8])) {
         for &byte in bytes {
             if byte == b'\n' {
                 if self.synced {
@@ -32,7 +32,7 @@ impl LineBuffer {
     }
 }
 
-pub fn parse_pico_line(raw: &[u8]) -> PicoLine<'_> {
+pub(crate) fn parse_pico_line(raw: &[u8]) -> PicoLine<'_> {
     let Ok(text) = std::str::from_utf8(raw) else {
         return PicoLine::Other;
     };
@@ -52,7 +52,7 @@ pub fn parse_pico_line(raw: &[u8]) -> PicoLine<'_> {
     }
 }
 
-pub fn note_text(note: &str) -> String {
+pub(crate) fn note_text(note: &str) -> String {
     if let Some(name) = note.strip_prefix("found ") {
         return format!("Pico found {name}");
     }

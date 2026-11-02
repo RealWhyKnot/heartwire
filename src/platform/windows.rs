@@ -25,10 +25,11 @@ fn wide(text: &str) -> Vec<u16> {
     OsStr::new(text).encode_wide().chain(Some(0)).collect()
 }
 
-pub fn autostart_value() -> Option<String> {
+pub(super) fn autostart_value() -> Option<String> {
     let key = wide(RUN_KEY);
     let name = wide(VALUE);
     let mut bytes: u32 = 0;
+    // SAFETY: key and name are terminated UTF-16; bytes is a writable size output.
     let status = unsafe {
         RegGetValueW(
             HKEY_CURRENT_USER,
@@ -43,7 +44,8 @@ pub fn autostart_value() -> Option<String> {
     if status != ERROR_SUCCESS || bytes < 2 {
         return None;
     }
-    let mut buf = vec![0u16; bytes as usize / 2];
+    let mut buf = registry_buffer(bytes);
+    // SAFETY: the terminated names and buffer remain live for the requested byte count.
     let status = unsafe {
         RegGetValueW(
             HKEY_CURRENT_USER,
@@ -62,12 +64,22 @@ pub fn autostart_value() -> Option<String> {
     Some(String::from_utf16_lossy(&buf[..end]))
 }
 
-pub fn set_autostart(command: Option<&str>) -> Result<(), String> {
+fn registry_buffer(bytes: u32) -> Vec<u16> {
+    vec![
+        0;
+        usize::try_from(bytes)
+            .expect("Windows pointer widths are at least 32 bits")
+            .div_ceil(2)
+    ]
+}
+
+pub(super) fn set_autostart(command: Option<&str>) -> Result<(), String> {
     let key = wide(RUN_KEY);
     let name = wide(VALUE);
     let status = match command {
         Some(command) => {
             let data = wide(command);
+            // SAFETY: key, name and the terminated data buffer remain live throughout the call.
             unsafe {
                 RegSetKeyValueW(
                     HKEY_CURRENT_USER,
@@ -75,10 +87,11 @@ pub fn set_autostart(command: Option<&str>) -> Result<(), String> {
                     name.as_ptr(),
                     REG_SZ,
                     data.as_ptr().cast(),
-                    (data.len() * 2) as u32,
+                    u32::try_from(data.len() * 2).expect("registry text fits a DWORD byte count"),
                 )
             }
         }
+        // SAFETY: both registry names are terminated UTF-16 buffers live for the call.
         None => unsafe { RegDeleteKeyValueW(HKEY_CURRENT_USER, key.as_ptr(), name.as_ptr()) },
     };
     if status == ERROR_SUCCESS || (command.is_none() && status == 2) {
@@ -101,14 +114,16 @@ fn same_name(exe: &[u16], name: &str) -> bool {
         .eq(name.encode_utf16().map(lower))
 }
 
-pub fn process_running(name: &str) -> bool {
+pub(crate) fn process_running(name: &str) -> bool {
+    // SAFETY: entry has the SDK layout and size; the successful snapshot is closed after enumeration.
     unsafe {
         let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
         if snapshot == INVALID_HANDLE_VALUE {
             return false;
         }
         let mut entry: PROCESSENTRY32W = std::mem::zeroed();
-        entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+        entry.dwSize = u32::try_from(std::mem::size_of::<PROCESSENTRY32W>())
+            .expect("PROCESSENTRY32W has a fixed DWORD size");
         let mut found = false;
         let mut more = Process32FirstW(snapshot, &mut entry) != 0;
         while more && !found {
@@ -120,14 +135,16 @@ pub fn process_running(name: &str) -> bool {
     }
 }
 
-pub fn claim_app_id() {
+pub(crate) fn claim_app_id() {
     let id = wide(APP_ID);
+    // SAFETY: id is a terminated UTF-16 buffer live until the function returns.
     unsafe { SetCurrentProcessExplicitAppUserModelID(id.as_ptr()) };
 }
 
-pub fn serial_ports_key() -> Option<Vec<u16>> {
+pub(crate) fn serial_ports_key() -> Option<Vec<u16>> {
     let path = wide(r"HARDWARE\DEVICEMAP\SERIALCOMM");
     let mut key: HKEY = std::ptr::null_mut();
+    // SAFETY: path is terminated UTF-16 and key is a writable handle output.
     let status = unsafe { RegOpenKeyExW(HKEY_LOCAL_MACHINE, path.as_ptr(), 0, KEY_READ, &mut key) };
     if status == ERROR_FILE_NOT_FOUND {
         return Some(Vec::new());
@@ -140,8 +157,10 @@ pub fn serial_ports_key() -> Option<Vec<u16>> {
     let mut data = [0u16; 128];
     let mut index = 0;
     let complete = loop {
-        let mut name_len = name.len() as u32;
-        let mut data_len = (data.len() * 2) as u32;
+        let mut name_len = u32::try_from(name.len()).expect("the name buffer has 256 code units");
+        let mut data_len =
+            u32::try_from(data.len() * 2).expect("registry text fits a DWORD byte count");
+        // SAFETY: key is open and both writable buffers have the supplied capacities.
         let status = unsafe {
             RegEnumValueW(
                 key,
@@ -160,19 +179,26 @@ pub fn serial_ports_key() -> Option<Vec<u16>> {
         if status != ERROR_SUCCESS {
             break false;
         }
-        out.extend_from_slice(&name[..name_len as usize]);
+        out.extend_from_slice(
+            &name[..usize::try_from(name_len).expect("the name length fits the supplied buffer")],
+        );
         out.push(0);
-        out.extend_from_slice(&data[..data_len as usize / 2]);
+        out.extend_from_slice(
+            &data[..usize::try_from(data_len).expect("the byte length fits the supplied buffer")
+                / 2],
+        );
         out.push(0);
         index += 1;
     };
+    // SAFETY: key was opened successfully and is not used after this close.
     unsafe { RegCloseKey(key) };
     complete.then_some(out)
 }
 
-pub fn open_url(url: &str) {
+pub(crate) fn open_url(url: &str) {
     let verb = wide("open");
     let target = wide(url);
+    // SAFETY: verb and target are terminated UTF-16; optional pointer arguments are null.
     unsafe {
         ShellExecuteW(
             std::ptr::null_mut(),
@@ -185,8 +211,9 @@ pub fn open_url(url: &str) {
     }
 }
 
-pub fn focus_existing(title: &str) -> bool {
+pub(crate) fn focus_existing(title: &str) -> bool {
     let title = wide(title);
+    // SAFETY: title is terminated UTF-16 and the returned nonnull window handle is passed back to Win32.
     unsafe {
         let window = FindWindowW(null(), title.as_ptr());
         if window.is_null() {
@@ -201,6 +228,13 @@ pub fn focus_existing(title: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn registry_buffers_hold_odd_byte_counts_without_overrunning() {
+        for bytes in 0..1024 {
+            assert!(registry_buffer(bytes).len() * 2 >= usize::try_from(bytes).unwrap());
+        }
+    }
 
     #[test]
     fn process_names_compare_without_case() {
@@ -228,8 +262,10 @@ mod tests {
         use windows_sys::Win32::UI::Shell::GetCurrentProcessExplicitAppUserModelID;
         claim_app_id();
         let mut id = std::ptr::null_mut();
+        // SAFETY: id is a writable output for the allocated application identifier.
         let result = unsafe { GetCurrentProcessExplicitAppUserModelID(&mut id) };
         assert_eq!(result, 0);
+        // SAFETY: the successful call returned terminated UTF-16 allocated for CoTaskMemFree.
         let text = unsafe {
             let len = (0..).take_while(|&i| *id.add(i) != 0).count();
             let text = String::from_utf16_lossy(std::slice::from_raw_parts(id, len));

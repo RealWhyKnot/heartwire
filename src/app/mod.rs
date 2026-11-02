@@ -20,7 +20,7 @@ use crate::ui::{AppWindow, Navigation};
 use crate::version::{self, Channel};
 use crate::{log, platform, steamvr, update};
 
-pub const TITLE: &str = "Heartwire";
+pub(crate) const TITLE: &str = "Heartwire";
 
 fn has_flag(flag: &str) -> bool {
     std::env::args().any(|a| a == flag)
@@ -33,16 +33,24 @@ fn select_backend(minimized: bool) {
         .with_winit_window_attributes_hook(move |attributes| attributes.with_active(!minimized))
         .select();
     if let Err(error) = selected {
-        log::write(&format!("backend: {error}"));
+        tracing::error!(error = %error, "backend: {error}");
     }
 }
 
 fn start_steamvr(config: &Config, dir: &Path, launched: bool) -> steamvr::Handle {
+    #[cfg(not(any(windows, test)))]
+    let _ = (config, launched);
+    #[cfg(not(windows))]
+    let _ = dir;
     steamvr::start(
         steamvr::Options {
+            #[cfg(any(windows, test))]
             enabled: config.steamvr_autostart,
+            #[cfg(any(windows, test))]
             registered: config.steamvr_registered,
+            #[cfg(windows)]
             data_dir: dir.to_path_buf(),
+            #[cfg(any(windows, test))]
             launched,
         },
         state::remember_steamvr_registration,
@@ -56,7 +64,7 @@ fn start_steamvr(config: &Config, dir: &Path, launched: bool) -> steamvr::Handle
 
 fn show(window: &AppWindow, minimized: bool) -> bool {
     if let Err(error) = window.show() {
-        log::write(&format!("show window: {error}"));
+        tracing::error!(error = %error, "show window: {error}");
         return false;
     }
     if minimized {
@@ -72,7 +80,10 @@ fn show(window: &AppWindow, minimized: bool) -> bool {
 
 pub fn run() {
     if let Some(target) = crate::perf::requested() {
-        crate::perf::main(target);
+        if let Err(error) = crate::perf::main(target) {
+            use std::io::Write;
+            let _ = writeln!(std::io::stderr().lock(), "{error}");
+        }
         return;
     }
     let dir = config::data_dir();
@@ -95,12 +106,12 @@ pub fn run() {
     log::init(&dir);
     log::catch_panics();
     platform::claim_app_id();
-    log::write(&format!(
+    tracing::info!(
         "Heartwire {} ({}) {} starting",
         version::VERSION,
         Channel::current().name(),
         update::rid()
-    ));
+    );
     platform::refresh_autostart();
     select_backend(minimized);
 
@@ -110,7 +121,7 @@ pub fn run() {
     let window = match AppWindow::new() {
         Ok(window) => window,
         Err(error) => {
-            log::write(&format!("window: {error}"));
+            tracing::error!(error = %error, "window: {error}");
             return;
         }
     };
@@ -127,7 +138,7 @@ pub fn run() {
     let engine = std::thread::Builder::new()
         .name("engine".into())
         .stack_size(256 * 1024)
-        .spawn(move || engine::run(engine_config, rx, engine_tx, bridge))
+        .spawn(move || engine::run(engine_config, &rx, engine_tx, bridge))
         .expect("engine thread");
 
     settings::bind(&window, &app, vr.sender());
@@ -140,13 +151,14 @@ pub fn run() {
     if show(&window, minimized)
         && let Err(error) = slint::run_event_loop()
     {
-        log::write(&format!("event loop: {error}"));
+        tracing::error!(error = %error, "event loop: {error}");
     }
     let _ = window.hide();
     app.flush();
     let _ = tx.send(Event::Quit);
     let _ = engine.join();
+    #[cfg(windows)]
     drop(vr);
-    log::write("stopped");
+    tracing::info!("stopped");
     drop(instance);
 }

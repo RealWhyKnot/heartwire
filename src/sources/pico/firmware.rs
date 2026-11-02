@@ -4,27 +4,28 @@ use std::time::{Duration, Instant};
 
 use super::open;
 
-pub const FIRMWARE_MAIN: &str = include_str!("../../../firmware/main.py");
+pub(crate) const FIRMWARE_MAIN: &str = include_str!("../../../firmware/main.py");
 
 const RAW_PROMPT: &[u8] = b"raw REPL; CTRL-B to exit\r\n>";
 
-pub fn install(port: &str, strap_name: &str) -> Result<(), String> {
+pub(crate) fn install(port: &str, strap_name: &str) -> Result<(), String> {
     let mut serial = open(port).map_err(|e| format!("{port}: {e}"))?;
     serial
         .set_timeout(Duration::from_millis(200))
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            format!("set the serial read timeout on {port}: {e}. Reconnect the Pico and try again.")
+        })?;
     upload(&mut *serial, strap_name)
 }
 
-pub fn strap_config(strap_name: &str) -> String {
-    format!(
-        "# Matched case-insensitively against the advertised name; empty means the first strap found.\nDEVICE_NAME = {}\n",
-        python_string(strap_name.trim())
-    )
+pub(super) fn strap_config(strap_name: &str) -> String {
+    format!("DEVICE_NAME = {}\n", python_string(strap_name.trim()))
 }
 
 fn upload<P: Read + Write + ?Sized>(board: &mut P, strap_name: &str) -> Result<(), String> {
-    let io = |e: std::io::Error| e.to_string();
+    let io = |e: std::io::Error| {
+        format!("transfer firmware to the Pico: {e}. Reconnect the Pico and try again.")
+    };
     board.write_all(b"\r\x03\x03").map_err(io)?;
     drain(board, Duration::from_millis(400));
     board.write_all(b"\r\x01").map_err(io)?;
@@ -41,7 +42,7 @@ fn upload<P: Read + Write + ?Sized>(board: &mut P, strap_name: &str) -> Result<(
     Ok(())
 }
 
-pub fn write_file_script(name: &str, content: &str) -> String {
+pub(crate) fn write_file_script(name: &str, content: &str) -> String {
     let mut script = format!("f=open({},'wb')\nw=f.write\n", python_string(name));
     for chunk in content.as_bytes().chunks(192) {
         script.push_str("w(b'");
@@ -49,7 +50,7 @@ pub fn write_file_script(name: &str, content: &str) -> String {
             match b {
                 b'\\' => script.push_str("\\\\"),
                 b'\'' => script.push_str("\\'"),
-                0x20..=0x7e => script.push(b as char),
+                0x20..=0x7e => script.push(char::from(b)),
                 _ => {
                     let _ = write!(script, "\\x{b:02x}");
                 }
@@ -61,7 +62,7 @@ pub fn write_file_script(name: &str, content: &str) -> String {
     script
 }
 
-pub fn python_string(text: &str) -> String {
+pub(super) fn python_string(text: &str) -> String {
     let mut out = String::from("'");
     for c in text.chars() {
         match c {
@@ -82,15 +83,21 @@ pub fn python_string(text: &str) -> String {
 
 fn exec<P: Read + Write + ?Sized>(board: &mut P, script: &str) -> Result<(), String> {
     for chunk in script.as_bytes().chunks(256) {
-        board.write_all(chunk).map_err(|e| e.to_string())?;
+        board.write_all(chunk).map_err(|e| {
+            format!(
+                "send a firmware script chunk to the Pico: {e}. Reconnect the Pico and try again."
+            )
+        })?;
         std::thread::sleep(Duration::from_millis(10));
     }
-    board.write_all(b"\x04").map_err(|e| e.to_string())?;
+    board.write_all(b"\x04").map_err(|e| {
+        format!("start the firmware script on the Pico: {e}. Reconnect the Pico and try again.")
+    })?;
     let reply = read_until(board, b"\x04>", Duration::from_secs(10))?;
     raw_reply_error(&reply)
 }
 
-pub fn raw_reply_error(reply: &[u8]) -> Result<(), String> {
+pub(super) fn raw_reply_error(reply: &[u8]) -> Result<(), String> {
     let start = reply
         .windows(2)
         .position(|w| w == b"OK")
@@ -277,6 +284,6 @@ mod tests {
         let reply = read_until(&mut *serial, b"\n#", Duration::from_secs(25))
             .or_else(|_| read_until(&mut *serial, b"\r\n", Duration::from_secs(5)))
             .expect("the firmware prints a line");
-        assert!(!reply.is_empty());
+        assert_ne!(reply.len(), 0);
     }
 }

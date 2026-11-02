@@ -1,12 +1,14 @@
-pub const MAX_BPM: u16 = 300;
+use num_traits::ToPrimitive;
+
+pub(crate) const MAX_BPM: u16 = 300;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Measurement {
+pub(crate) struct Measurement {
     pub bpm: u16,
     pub contact: Option<bool>,
 }
 
-pub fn parse_measurement(data: &[u8]) -> Option<Measurement> {
+pub(crate) fn parse_measurement(data: &[u8]) -> Option<Measurement> {
     let flags = *data.first()?;
     let bpm = if flags & 0x01 != 0 {
         u16::from_le_bytes([*data.get(1)?, *data.get(2)?])
@@ -17,21 +19,21 @@ pub fn parse_measurement(data: &[u8]) -> Option<Measurement> {
     Some(Measurement { bpm, contact })
 }
 
-pub fn usable(m: Measurement) -> Option<u16> {
+pub(crate) fn usable(m: Measurement) -> Option<u16> {
     (m.contact != Some(false) && (1..=MAX_BPM).contains(&m.bpm)).then_some(m.bpm)
 }
 
-pub fn bpm_from_f64(value: f64) -> Option<u16> {
+pub(crate) fn bpm_from_f64(value: f64) -> Option<u16> {
     if !value.is_finite() {
         return None;
     }
     let bpm = value.round();
     (1.0..=f64::from(MAX_BPM))
         .contains(&bpm)
-        .then_some(bpm as u16)
+        .then(|| bpm.to_u16().expect("bpm is between 1 and MAX_BPM"))
 }
 
-pub fn parse_bpm_text(text: &str) -> Option<u16> {
+pub(crate) fn parse_bpm_text(text: &str) -> Option<u16> {
     bpm_from_f64(text.trim().parse().ok()?)
 }
 

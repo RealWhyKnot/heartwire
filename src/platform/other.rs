@@ -38,7 +38,7 @@ fn render(command: &str) -> String {
     )
 }
 
-pub fn autostart_value() -> Option<String> {
+pub(crate) fn autostart_value() -> Option<String> {
     let text = std::fs::read_to_string(entry()).ok()?;
     let current = super::launch_command()?.1;
     Some(if text == render(&current) {
@@ -48,29 +48,42 @@ pub fn autostart_value() -> Option<String> {
     })
 }
 
-pub fn set_autostart(command: Option<&str>) -> Result<(), String> {
+pub(crate) fn set_autostart(command: Option<&str>) -> Result<(), String> {
     let path = entry();
     match command {
         Some(command) => {
             if let Some(dir) = path.parent() {
-                std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+                std::fs::create_dir_all(dir).map_err(|e| {
+                    format!(
+                        "create autostart folder {}: {e}. Check that the folder is writable.",
+                        dir.display()
+                    )
+                })?;
             }
-            std::fs::write(&path, render(command)).map_err(|e| e.to_string())
+            std::fs::write(&path, render(command)).map_err(|e| {
+                format!(
+                    "write autostart entry {}: {e}. Check that the folder is writable.",
+                    path.display()
+                )
+            })
         }
         None => match std::fs::remove_file(&path) {
-            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.to_string()),
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(format!(
+                "remove autostart entry {}: {e}. Check that the folder is writable.",
+                path.display()
+            )),
             _ => Ok(()),
         },
     }
 }
 
-pub fn claim_app_id() {}
+pub(crate) fn claim_app_id() {}
 
-pub fn serial_ports_key() -> Option<Vec<u16>> {
+pub(crate) fn serial_ports_key() -> Option<Vec<u16>> {
     None
 }
 
-pub fn open_url(url: &str) {
+pub(crate) fn open_url(url: &str) {
     let opener = if cfg!(target_os = "macos") {
         "open"
     } else {
@@ -79,6 +92,6 @@ pub fn open_url(url: &str) {
     let _ = std::process::Command::new(opener).arg(url).spawn();
 }
 
-pub fn focus_existing(_title: &str) -> bool {
+pub(crate) fn focus_existing(_title: &str) -> bool {
     false
 }

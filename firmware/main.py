@@ -1,9 +1,5 @@
-"""Pico firmware. Reads a BLE heart rate strap and prints each reading to USB serial.
-
-Bare integer lines are readings. Every other line starts with '#' so the host can ignore it.
-"""
-
 import asyncio
+import sys
 
 import aioble
 import bluetooth
@@ -23,18 +19,14 @@ except (TypeError, ValueError):
     led = None
 
 
-def set_led(on):
+def set_led(*, on: bool) -> None:
     if led is not None:
         led.value(1 if on else 0)
 
 
-def read_bpm(data):
-    """Returns None while the strap reports that it is not touching skin."""
+def read_bpm(data: bytes) -> int | None:
     flags = data[0]
-    if flags & 0x01:
-        bpm = data[1] | (data[2] << 8)
-    else:
-        bpm = data[1]
+    bpm = data[1] | (data[2] << 8) if flags & 0x01 else data[1]
     contact_supported = flags & 0x04
     contact_detected = flags & 0x02
     if contact_supported and not contact_detected:
@@ -42,7 +34,7 @@ def read_bpm(data):
     return bpm or None
 
 
-async def find_strap():
+async def find_strap() -> aioble.Device | None:
     wanted = DEVICE_NAME.lower()
     async with aioble.scan(8000, interval_us=30000, window_us=30000, active=True) as scanner:
         async for result in scanner:
@@ -51,45 +43,49 @@ async def find_strap():
                 continue
             if wanted and wanted not in name.lower():
                 continue
-            print("# found", name or result.device.addr_hex())
+            sys.stdout.write("# found " + (name or result.device.addr_hex()) + "\n")
             return result.device
     return None
 
 
-async def stream(device):
+async def stream(device: aioble.Device) -> None:
     connection = await device.connect(timeout_ms=10000)
     async with connection:
         service = await connection.service(HR_SERVICE)
         characteristic = await service.characteristic(HR_MEASUREMENT)
         await characteristic.subscribe(notify=True)
-        print("# subscribed")
-        set_led(True)
+        sys.stdout.write("# subscribed\n")
+        set_led(on=True)
         quiet = False
         while True:
             bpm = read_bpm(await characteristic.notified(timeout_ms=15000))
             if bpm is None:
                 if not quiet:
-                    print("# no skin contact")
+                    sys.stdout.write("# no skin contact\n")
                     quiet = True
                 continue
             quiet = False
-            print(bpm)
+            sys.stdout.write(str(bpm) + "\n")
 
 
-async def main():
+async def scan_and_stream() -> None:
+    device = await find_strap()
+    if device is None:
+        sys.stdout.write("# no strap found, rescanning\n")
+        await asyncio.sleep(2)
+        return
+    await stream(device)
+
+
+async def main() -> None:
     while True:
-        set_led(False)
+        set_led(on=False)
         try:
-            device = await find_strap()
-            if device is None:
-                print("# no strap found, rescanning")
-                await asyncio.sleep(2)
-                continue
-            await stream(device)
+            await scan_and_stream()
         except (aioble.DeviceDisconnectedError, asyncio.TimeoutError):
-            print("# strap disconnected")
-        except Exception as error:
-            print("# error:", repr(error))
+            sys.stdout.write("# strap disconnected\n")
+        except (OSError, aioble.GattError, ValueError) as error:
+            sys.stdout.write("# error: " + repr(error) + "\n")
             await asyncio.sleep(2)
 
 

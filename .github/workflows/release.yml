@@ -132,7 +132,7 @@ jobs:
           New-Item -ItemType Directory -Force (Join-Path $stage 'firmware') | Out-Null
           Copy-Item "target/${{ matrix.target }}/release/${{ matrix.exe }}" $stage
           Copy-Item README.md, LICENSE, NOTICE.md $stage
-          Copy-Item firmware/main.py, firmware/hr_config.example.py (Join-Path $stage 'firmware')
+          Copy-Item firmware/main.py, firmware/hr_config_example.py (Join-Path $stage 'firmware')
           if ('${{ matrix.ext }}' -eq 'zip') {
             Compress-Archive -Path "$stage/*" -DestinationPath "dist/$name.zip" -Force
           } else {
@@ -153,7 +153,7 @@ jobs:
           $version = $env:HEARTWIRE_VERSION
           $name = "heartwire-$version-${{ matrix.rid }}"
           ./installer/build.ps1 -Payload "dist/$name" -Version $version -OutFile "dist/$name-setup.exe"
-          ./installer/test.ps1 -Setup "dist/$name-setup.exe" -Payload "dist/$name" -Version $version
+          ./installer/Test-Build.ps1 -Setup "dist/$name-setup.exe" -Payload "dist/$name" -Version $version
 
       - name: Checksums
         uses: RealWhyKnot/workflows/checksums@v1

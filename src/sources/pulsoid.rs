@@ -12,7 +12,7 @@ const RETRY: Duration = Duration::from_secs(5);
 const SILENCE: Duration = Duration::from_secs(90);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 
-pub fn run(ctx: &Context, widget: &str) {
+pub(crate) fn run(ctx: &Context, widget: &str) {
     if widget.is_empty() {
         ctx.status("Set a Pulsoid widget ID in Settings");
         while !ctx.sleep(Duration::from_secs(3600)) {}
@@ -46,15 +46,16 @@ fn socket_url(widget: &str) -> Result<String, String> {
         .post(RPC_URL)
         .header("Content-Type", "application/json")
         .send(body.to_string())
-        .map_err(|e| e.to_string())?
+        .map_err(|e| format!("look up the Pulsoid widget on api.stromno.com: {e}"))?
         .body_mut()
         .read_to_string()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("read the Pulsoid widget reply from api.stromno.com: {e}"))?;
     ramiel_url(&text)
 }
 
-pub fn ramiel_url(reply: &str) -> Result<String, String> {
-    let value: Value = serde_json::from_str(reply).map_err(|e| e.to_string())?;
+pub(crate) fn ramiel_url(reply: &str) -> Result<String, String> {
+    let value: Value =
+        serde_json::from_str(reply).map_err(|e| format!("parse the Pulsoid widget reply: {e}"))?;
     if let Some(error) = value.get("error") {
         return Err(error.to_string());
     }
@@ -65,7 +66,7 @@ pub fn ramiel_url(reply: &str) -> Result<String, String> {
         .ok_or_else(|| "reply has no socket address".into())
 }
 
-pub fn bpm_from_message(message: &str) -> Option<u16> {
+pub(crate) fn bpm_from_message(message: &str) -> Option<u16> {
     let value: Value = serde_json::from_str(message).ok()?;
     let rate = &value["data"]["heartRate"];
     let bpm = rate
@@ -99,7 +100,7 @@ fn listen(ctx: &Context, url: &str) {
         Ok(tcp) => tcp,
         Err(error) => {
             if !ctx.stopped() {
-                crate::log::write(&format!("pulsoid connect: {error}"));
+                tracing::warn!(error = %error, "pulsoid connect: {error}");
                 ctx.status("Can't reach Pulsoid, retrying");
             }
             return;
@@ -112,13 +113,13 @@ fn listen(ctx: &Context, url: &str) {
     let mut socket = match tungstenite::client_tls(request, tcp) {
         Ok((socket, _)) => socket,
         Err(error) => {
-            crate::log::write(&format!("pulsoid handshake: {error}"));
+            tracing::warn!(error = %error, "pulsoid handshake: {error}");
             ctx.status("Can't reach Pulsoid, retrying");
             return;
         }
     };
     ctx.status("Pulsoid connected");
-    crate::log::write("pulsoid connected");
+    tracing::info!("pulsoid connected");
     while !ctx.stopped() {
         match socket.read() {
             Ok(Message::Text(text)) => {
@@ -130,7 +131,7 @@ fn listen(ctx: &Context, url: &str) {
             Ok(_) => {}
             Err(error) => {
                 if !ctx.stopped() {
-                    crate::log::write(&format!("pulsoid socket: {error}"));
+                    tracing::warn!(error = %error, "pulsoid socket: {error}");
                 }
                 break;
             }

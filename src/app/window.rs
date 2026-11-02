@@ -4,7 +4,7 @@ use slint::winit_030::{EventResult, WinitWindowAccessor};
 
 use crate::ui::AppWindow;
 
-pub fn on_screen_after(event: &WindowEvent, current: bool) -> bool {
+pub(super) fn on_screen_after(event: &WindowEvent, current: bool) -> bool {
     match event {
         WindowEvent::Resized(size) => size.width > 0 && size.height > 0,
         WindowEvent::Occluded(hidden) => !hidden,
@@ -12,7 +12,7 @@ pub fn on_screen_after(event: &WindowEvent, current: bool) -> bool {
     }
 }
 
-pub fn track_on_screen(window: &AppWindow) {
+pub(super) fn track_on_screen(window: &AppWindow) {
     let weak = window.as_weak();
     window.window().on_winit_window_event(move |_, event| {
         if let Some(w) = weak.upgrade() {

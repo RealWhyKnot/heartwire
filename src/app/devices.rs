@@ -3,7 +3,7 @@ use slint::{ModelRc, SharedString, VecModel};
 use crate::sources::Device;
 use crate::ui::DeviceRow;
 
-pub fn rows(devices: &[Device], pinned: &str) -> Vec<DeviceRow> {
+pub(crate) fn rows(devices: &[Device], pinned: &str) -> Vec<DeviceRow> {
     let pinned = pinned.trim();
     let mut rows = vec![DeviceRow {
         name: "Any heart rate device".into(),
@@ -35,7 +35,7 @@ pub fn rows(devices: &[Device], pinned: &str) -> Vec<DeviceRow> {
     rows
 }
 
-pub fn model(devices: &[Device], pinned: &str) -> ModelRc<DeviceRow> {
+pub(crate) fn model(devices: &[Device], pinned: &str) -> ModelRc<DeviceRow> {
     ModelRc::new(VecModel::from(rows(devices, pinned)))
 }
 

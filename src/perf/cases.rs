@@ -44,26 +44,30 @@ struct Pipeline {
 }
 
 impl Pipeline {
-    fn start() -> Pipeline {
-        let osc = UdpSocket::bind("127.0.0.1:0").unwrap();
+    fn start() -> Result<Pipeline, String> {
+        let osc = UdpSocket::bind("127.0.0.1:0")
+            .map_err(|error| format!("bind benchmark OSC receiver on loopback: {error}"))?;
         let config = Config {
             service_type: Service::Http,
             http_server_port: 0,
-            osc_client_port: osc.local_addr().unwrap().port(),
+            osc_client_port: osc
+                .local_addr()
+                .map_err(|error| format!("read benchmark OSC receiver address: {error}"))?
+                .port(),
             ..Config::default()
         };
         let (tx, rx) = channel();
         let (seen, shown) = channel();
         let engine_tx = tx.clone();
-        let worker = std::thread::spawn(move || engine::run(config, rx, engine_tx, Signal(seen)));
+        let worker = std::thread::spawn(move || engine::run(config, &rx, engine_tx, Signal(seen)));
         let _ = shown.recv();
-        Pipeline {
+        Ok(Pipeline {
             tx,
             shown,
             worker: Some(worker),
             bpm: 60,
             _osc: osc,
-        }
+        })
     }
 
     fn reading(&mut self) {
@@ -93,23 +97,23 @@ struct HttpServer {
 }
 
 impl HttpServer {
-    fn start() -> HttpServer {
+    fn start() -> Result<HttpServer, String> {
         let (ctx, rx, stop) = Context::standalone();
         let port = TcpListener::bind("127.0.0.1:0")
-            .unwrap()
+            .map_err(|error| format!("reserve a loopback port for the HTTP benchmark: {error}"))?
             .local_addr()
-            .unwrap()
+            .map_err(|error| format!("read the reserved HTTP benchmark address: {error}"))?
             .port();
-        let worker = std::thread::spawn(move || sources::http::run(ctx, port));
+        let worker = std::thread::spawn(move || sources::http::run(&ctx, port));
         while TcpStream::connect(("127.0.0.1", port)).is_err() {
             std::thread::sleep(MS);
         }
-        HttpServer {
+        Ok(HttpServer {
             port,
             rx,
             stop,
             worker: Some(worker),
-        }
+        })
     }
 
     fn post(&mut self) {
@@ -155,9 +159,8 @@ fn devices() -> Vec<Device> {
         .collect()
 }
 
-pub fn all() -> Vec<Case> {
-    #[cfg_attr(not(windows), allow(unused_mut))]
-    let mut cases = vec![
+pub(super) fn all() -> Result<Vec<Case>, String> {
+    let cases = vec![
         Case::new("core", "parse a BLE heart rate packet", 100 * NS, || {
             black_box(
                 crate::heart_rate::parse_measurement(black_box(&[0x16, 72, 0x10, 0x03]))
@@ -182,15 +185,20 @@ pub fn all() -> Vec<Case> {
             }
         }),
         Case::new("osc", "send a message over UDP", 50 * US, {
-            let receiver = UdpSocket::bind("127.0.0.1:0").unwrap();
-            let mut sender = osc::Sender::new(receiver.local_addr().unwrap());
+            let receiver = UdpSocket::bind("127.0.0.1:0").map_err(|error| {
+                format!("bind loopback receiver for the UDP benchmark: {error}")
+            })?;
+            let mut sender =
+                osc::Sender::new(receiver.local_addr().map_err(|error| {
+                    format!("read the UDP benchmark receiver address: {error}")
+                })?);
             move || {
                 sender.send("/avatar/parameters/hr_percent", Arg::Float(0.5));
                 black_box(&receiver);
             }
         }),
         Case::new("engine", "reading to OSC and the window", 200 * US, {
-            let mut pipeline = Pipeline::start();
+            let mut pipeline = Pipeline::start()?;
             move || pipeline.reading()
         }),
         Case::new("sources", "parse an HTTP POST", 2 * US, || {
@@ -204,7 +212,7 @@ pub fn all() -> Vec<Case> {
             )));
         }),
         Case::new("sources", "HTTP reading over loopback", 5 * MS, {
-            let mut server = HttpServer::start();
+            let mut server = HttpServer::start()?;
             move || server.post()
         }),
         Case::new("sources", "parse a Pico line", 100 * NS, || {
@@ -274,7 +282,8 @@ pub fn all() -> Vec<Case> {
         }),
         Case::new("update", "pick the newest of 20 releases", 10 * US, {
             let list = releases();
-            let current = AppVersion::parse("v2026.10.9.0").unwrap();
+            let current = AppVersion::parse("v2026.10.9.0")
+                .expect("the benchmark version has four numeric components");
             move || {
                 black_box(update::select(&list, current, Channel::Beta));
             }
@@ -314,6 +323,8 @@ pub fn all() -> Vec<Case> {
         }),
     ];
     #[cfg(windows)]
+    let mut cases = cases;
+    #[cfg(windows)]
     cases.push(Case::new(
         "platform",
         "check whether SteamVR runs",
@@ -322,5 +333,5 @@ pub fn all() -> Vec<Case> {
             black_box(crate::platform::process_running("vrserver.exe"));
         },
     ));
-    cases
+    Ok(cases)
 }

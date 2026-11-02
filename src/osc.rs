@@ -1,12 +1,12 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, ToSocketAddrs, UdpSocket};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Arg {
+pub(crate) enum Arg {
     Float(f32),
     Bool(bool),
 }
 
-pub fn encode(address: &str, arg: Arg, out: &mut Vec<u8>) {
+pub(crate) fn encode(address: &str, arg: Arg, out: &mut Vec<u8>) {
     out.clear();
     push_padded(out, address.as_bytes());
     match arg {
@@ -24,7 +24,7 @@ fn push_padded(out: &mut Vec<u8>, bytes: &[u8]) {
     out.resize(out.len() + 4 - bytes.len() % 4, 0);
 }
 
-pub fn resolve(host: &str, port: u16) -> SocketAddr {
+pub(crate) fn resolve(host: &str, port: u16) -> SocketAddr {
     let host = host.trim();
     if let Ok(ip) = host.parse::<IpAddr>() {
         return SocketAddr::new(ip, port);
@@ -38,7 +38,7 @@ pub fn resolve(host: &str, port: u16) -> SocketAddr {
     SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port)
 }
 
-pub struct Sender {
+pub(crate) struct Sender {
     socket: Option<UdpSocket>,
     target: SocketAddr,
     buf: Vec<u8>,
@@ -46,7 +46,7 @@ pub struct Sender {
 }
 
 impl Sender {
-    pub fn new(target: SocketAddr) -> Self {
+    pub(crate) fn new(target: SocketAddr) -> Self {
         let mut sender = Sender {
             socket: None,
             target,
@@ -57,7 +57,7 @@ impl Sender {
         sender
     }
 
-    pub fn retarget(&mut self, target: SocketAddr) {
+    pub(crate) fn retarget(&mut self, target: SocketAddr) {
         let same_family = self
             .socket
             .as_ref()
@@ -72,7 +72,7 @@ impl Sender {
             self.socket = match UdpSocket::bind(bind) {
                 Ok(socket) => Some(socket),
                 Err(error) => {
-                    crate::log::write(&format!("osc socket: {error}"));
+                    tracing::warn!(error = %error, "osc socket: {error}");
                     None
                 }
             };
@@ -80,7 +80,7 @@ impl Sender {
         self.target = target;
     }
 
-    pub fn send(&mut self, address: &str, arg: Arg) {
+    pub(crate) fn send(&mut self, address: &str, arg: Arg) {
         if address.is_empty() {
             return;
         }
@@ -88,7 +88,7 @@ impl Sender {
         encode(address, arg, &mut self.buf);
         let result = socket.send_to(&self.buf, self.target);
         if let Some(line) = self.failures.note(result.err(), self.target) {
-            crate::log::write(&line);
+            tracing::info!("{}", &line);
         }
     }
 }

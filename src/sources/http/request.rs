@@ -1,8 +1,8 @@
 const MAX_REQUEST: usize = 16 * 1024;
-pub const MAX_TOTAL: usize = 3 * MAX_REQUEST;
+pub(super) const MAX_TOTAL: usize = 3 * MAX_REQUEST;
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum Request {
+pub(crate) enum Request {
     Incomplete,
     Bad,
     Get,
@@ -10,7 +10,7 @@ pub enum Request {
     Other,
 }
 
-pub fn parse_request(buf: &[u8]) -> Request {
+pub(crate) fn parse_request(buf: &[u8]) -> Request {
     let Some(head_end) = find(buf, b"\r\n\r\n") else {
         return if buf.len() >= MAX_REQUEST {
             Request::Bad

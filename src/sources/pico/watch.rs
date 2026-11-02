@@ -3,14 +3,14 @@ use std::time::{Duration, Instant};
 const REFRESH: Duration = Duration::from_secs(30);
 
 #[derive(Default)]
-pub struct PortWatch {
+pub(crate) struct PortWatch {
     key: Option<Vec<u16>>,
     found: Option<String>,
     at: Option<Instant>,
 }
 
 impl PortWatch {
-    pub fn find(&mut self) -> Option<String> {
+    pub(crate) fn find(&mut self) -> Option<String> {
         self.find_with(
             crate::platform::serial_ports_key(),
             Instant::now(),
@@ -18,7 +18,7 @@ impl PortWatch {
         )
     }
 
-    pub fn forget(&mut self) {
+    pub(crate) fn forget(&mut self) {
         self.at = None;
     }
 
@@ -100,6 +100,11 @@ mod tests {
             std::hint::black_box(super::super::find_port());
         }
         let full = start.elapsed() / 20;
-        println!("port list key {key:?}, full enumeration {full:?}");
+        use std::io::Write;
+        writeln!(
+            std::io::stdout().lock(),
+            "port list key {key:?}, full enumeration {full:?}"
+        )
+        .unwrap_or_else(|error| panic!("failed printing to stdout: {error}"));
     }
 }

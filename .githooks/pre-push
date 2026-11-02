@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+shopt -s inherit_errexit
+
+root=$(git rev-parse --show-toplevel)
+cd "${root}"
+python -B .github/lint/style_check.py
+cargo fmt --check
+timeout 1200 cargo clippy --workspace --exclude heartwire-ui --all-targets --locked -- -D warnings
+timeout 1200 cargo test --workspace --all-targets --locked
+timeout 600 pwsh -NoProfile -File .github/lint/Invoke-PSLint.ps1
+ruff format --check .
+ruff check --ignore-noqa .
+python_path=$(python -c 'import sys; print(sys.executable)')
+pyright --warnings --pythonpath "${python_path}"
+python -I .github/lint/pystyle.py
+timeout 180 python -m unittest discover -s tests -t .
+if [[ ${OSTYPE} == msys* || ${OSTYPE} == cygwin* ]]; then
+  windows_root=$(pwd -W)
+  MSYS_NO_PATHCONV=1 timeout 180 wsl --distribution "${LINT_WSL_DISTRO:?Set LINT_WSL_DISTRO to your lint distro}" \
+    --cd "${windows_root}" -- bash .githooks/check-shell
+else
+  bash .githooks/check-shell
+fi

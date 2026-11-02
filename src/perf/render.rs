@@ -26,7 +26,7 @@ struct Offscreen {
 
 impl Platform for Offscreen {
     fn create_window_adapter(&self) -> Result<Rc<dyn WindowAdapter>, PlatformError> {
-        Ok(self.window.clone())
+        Ok(Rc::<MinimalSoftwareWindow>::clone(&self.window))
     }
 
     fn duration_since_start(&self) -> Duration {
@@ -44,7 +44,7 @@ impl Screen {
     fn new() -> Option<Screen> {
         let window = MinimalSoftwareWindow::new(RepaintBufferType::ReusedBuffer);
         slint::platform::set_platform(Box::new(Offscreen {
-            window: window.clone(),
+            window: std::rc::Rc::clone(&window),
         }))
         .ok()?;
         let app = AppWindow::new().ok()?;
@@ -55,7 +55,10 @@ impl Screen {
         Some(Screen {
             window,
             app,
-            pixels: vec![PremultipliedRgbaColor::default(); (WIDTH * HEIGHT) as usize],
+            pixels: vec![
+                PremultipliedRgbaColor::default();
+                usize::try_from(WIDTH * HEIGHT).expect("the frame dimensions fit usize")
+            ],
         })
     }
 
@@ -71,7 +74,10 @@ impl Screen {
             } else {
                 RepaintBufferType::ReusedBuffer
             });
-            renderer.render(pixels, WIDTH as usize);
+            renderer.render(
+                pixels,
+                usize::try_from(WIDTH).expect("the window width fits usize"),
+            );
         });
     }
 
@@ -86,27 +92,27 @@ fn window_cases(screen: &Rc<RefCell<Screen>>) -> Vec<Case> {
         s.app.global::<HeartRate>().set_connected(connected);
         s.app.set_on_screen(on_screen);
     };
-    let s = screen.clone();
+    let s = std::rc::Rc::clone(screen);
     let full_home = move || {
         let mut s = s.borrow_mut();
         setup(&s, 0, true, true);
         s.frame(true);
     };
-    let s = screen.clone();
+    let s = std::rc::Rc::clone(screen);
     let ping = move || {
         let mut s = s.borrow_mut();
         setup(&s, 0, true, true);
         s.advance(Duration::from_millis(33));
         s.frame(false);
     };
-    let s = screen.clone();
+    let s = std::rc::Rc::clone(screen);
     let hidden_ping = move || {
         let mut s = s.borrow_mut();
         setup(&s, 0, true, false);
         s.advance(Duration::from_millis(33));
         s.frame(false);
     };
-    let s = screen.clone();
+    let s = std::rc::Rc::clone(screen);
     let mut bpm = 60;
     let bpm_change = move || {
         let mut s = s.borrow_mut();
@@ -115,7 +121,7 @@ fn window_cases(screen: &Rc<RefCell<Screen>>) -> Vec<Case> {
         s.app.global::<HeartRate>().set_bpm(bpm);
         s.frame(false);
     };
-    let s = screen.clone();
+    let s = std::rc::Rc::clone(screen);
     let settings = move || {
         let mut s = s.borrow_mut();
         setup(&s, 1, true, true);
@@ -157,7 +163,7 @@ fn panel_timings(settings: Settings) -> Vec<Timing> {
     let panel = Rc::new(RefCell::new(panel));
     let mut bpm = 60;
     let changed = {
-        let panel = panel.clone();
+        let panel = std::rc::Rc::clone(&panel);
         move || {
             bpm = if bpm == 60 { 61 } else { 60 };
             std::hint::black_box(panel.borrow_mut().render(&view(bpm)).0.len());
@@ -186,13 +192,17 @@ fn panel_timings(settings: Settings) -> Vec<Timing> {
     timings
 }
 
-pub fn timings(settings: Settings) -> Vec<Timing> {
+pub(super) fn timings(settings: Settings) -> Vec<Timing> {
     let window = std::thread::spawn(move || window_timings(settings));
     #[cfg(any(windows, test))]
     let panel = std::thread::spawn(move || panel_timings(settings));
-    #[cfg_attr(not(any(windows, test)), allow(unused_mut))]
-    let mut out = window.join().unwrap_or_default();
+    let out = window.join().unwrap_or_default();
     #[cfg(any(windows, test))]
-    out.extend(panel.join().unwrap_or_default());
+    {
+        let mut out = out;
+        out.extend(panel.join().unwrap_or_default());
+        out
+    }
+    #[cfg(not(any(windows, test)))]
     out
 }

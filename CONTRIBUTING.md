@@ -57,13 +57,13 @@ cargo test --release --test taskbar_beat -- --ignored --nocapture
 
 `installer/build.ps1` packs a folder with the zip's files into the Windows setup.
 It needs [NSIS](https://nsis.sourceforge.io) 3. CI builds one from a debug build,
-then `installer/test.ps1` installs, moves, reinstalls and uninstalls it under the
+then `installer/Test-Build.ps1` installs, moves, reinstalls and uninstalls it under the
 current account. The test won't run where Heartwire is already installed or
 starts with Windows.
 
 ```powershell
 ./installer/build.ps1 -Payload dist/payload -Version 0.0.0.0-dev -OutFile dist/heartwire-setup.exe
-./installer/test.ps1 -Setup dist/heartwire-setup.exe -Payload dist/payload -Version 0.0.0.0-dev
+./installer/Test-Build.ps1 -Setup dist/heartwire-setup.exe -Payload dist/payload -Version 0.0.0.0-dev
 ```
 
 ## Performance

@@ -1,23 +1,20 @@
-#![cfg_attr(not(any(windows, test)), allow(dead_code))]
-
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
 use super::{Msg, Options, PanelView};
 
-pub const PROBE: Duration = Duration::from_secs(10);
-pub const AFTER_QUIT: Duration = Duration::from_secs(20);
-pub const AFTER_ERROR: Duration = Duration::from_secs(30);
+pub(super) const PROBE: Duration = Duration::from_secs(10);
+pub(super) const AFTER_QUIT: Duration = Duration::from_secs(20);
+pub(super) const AFTER_ERROR: Duration = Duration::from_secs(30);
 const IDLE: Duration = Duration::from_secs(3600);
 
-pub enum SessionEnd {
+pub(super) enum SessionEnd {
     SteamVrQuit,
     AppQuit,
-    #[cfg_attr(not(windows), allow(dead_code))]
     Unregistered,
 }
 
-pub trait Runtime {
+pub(super) trait Runtime {
     fn running(&mut self) -> bool;
 
     fn session(
@@ -29,26 +26,42 @@ pub trait Runtime {
     ) -> Result<SessionEnd, String>;
 }
 
-pub fn supervise(
+pub(super) fn supervise(
     options: &Options,
     rx: &Receiver<Msg>,
     runtime: &mut impl Runtime,
     on_quit: impl Fn(),
 ) {
+    supervise_with(options, rx, runtime, on_quit, Instant::now, |wait| {
+        rx.recv_timeout(wait)
+    });
+}
+
+fn supervise_with(
+    options: &Options,
+    rx: &Receiver<Msg>,
+    runtime: &mut impl Runtime,
+    on_quit: impl Fn(),
+    now: impl Fn() -> Instant,
+    mut receive: impl FnMut(Duration) -> Result<Msg, RecvTimeoutError>,
+) {
     let mut enabled = options.enabled;
     let mut registered = options.registered;
     let mut view = PanelView::default();
-    let mut next_probe = Instant::now();
+    let mut next_probe = now();
     let mut last_error: Option<String> = None;
-    crate::log::write(if enabled {
-        "steamvr: waiting for SteamVR"
-    } else {
-        "steamvr: off"
-    });
+    tracing::info!(
+        "{}",
+        if enabled {
+            "steamvr: waiting for SteamVR"
+        } else {
+            "steamvr: off"
+        }
+    );
     loop {
         let active = enabled || registered;
-        if active && Instant::now() >= next_probe {
-            next_probe = Instant::now() + PROBE;
+        if active && now() >= next_probe {
+            next_probe = now() + PROBE;
             if runtime.running() {
                 match runtime.session(&mut enabled, &mut registered, rx, &mut view) {
                     Ok(SessionEnd::SteamVrQuit) => {
@@ -56,30 +69,30 @@ pub fn supervise(
                             on_quit();
                             return;
                         }
-                        next_probe = Instant::now() + AFTER_QUIT;
+                        next_probe = now() + AFTER_QUIT;
                     }
                     Ok(SessionEnd::AppQuit) => return,
                     Ok(SessionEnd::Unregistered) => {}
                     Err(error) => {
                         if last_error.as_deref() != Some(error.as_str()) {
-                            crate::log::write(&format!("steamvr: {error}"));
+                            tracing::warn!(error = %error, "steamvr: {error}");
                             last_error = Some(error);
                         }
-                        next_probe = Instant::now() + AFTER_ERROR;
+                        next_probe = now() + AFTER_ERROR;
                     }
                 }
             }
         }
         let wait = if enabled || registered {
-            next_probe.saturating_duration_since(Instant::now())
+            next_probe.saturating_duration_since(now())
         } else {
             IDLE
         };
-        match rx.recv_timeout(wait) {
+        match receive(wait) {
             Ok(Msg::Quit) | Err(RecvTimeoutError::Disconnected) => return,
             Ok(Msg::Enable(on)) => {
                 enabled = on;
-                next_probe = Instant::now();
+                next_probe = now();
             }
             Ok(Msg::View(next)) => view = next,
             Err(RecvTimeoutError::Timeout) => {}
@@ -91,7 +104,6 @@ pub fn supervise(
 mod tests {
     use super::*;
     use std::cell::Cell;
-    use std::path::PathBuf;
     use std::rc::Rc;
     use std::sync::mpsc::{Sender, channel};
 
@@ -123,12 +135,13 @@ mod tests {
         }
     }
 
-    fn options(enabled: bool, launched: bool) -> Options {
+    fn options(enabled: bool) -> Options {
         Options {
             enabled,
             registered: enabled,
-            data_dir: PathBuf::new(),
-            launched,
+            #[cfg(windows)]
+            data_dir: std::path::PathBuf::new(),
+            launched: false,
         }
     }
 
@@ -148,12 +161,25 @@ mod tests {
     }
 
     #[test]
+    fn unregistering_returns_to_the_message_loop() {
+        let (tx, rx) = channel();
+        feed(&tx, [Msg::Quit]);
+        let mut fake = Fake {
+            running: true,
+            end: Some(|| Ok(SessionEnd::Unregistered)),
+            ..Fake::default()
+        };
+        supervise(&options(true), &rx, &mut fake, || {});
+        assert_eq!(fake.sessions, 1);
+    }
+
+    #[test]
     fn readings_do_not_trigger_process_scans() {
         let (tx, rx) = channel();
         feed(&tx, (60..160).map(view));
         feed(&tx, [Msg::Quit]);
         let mut fake = Fake::default();
-        supervise(&options(true, false), &rx, &mut fake, || {});
+        supervise(&options(true), &rx, &mut fake, || {});
         assert_eq!(fake.probes, 1, "one probe at start, none per reading");
     }
 
@@ -163,7 +189,7 @@ mod tests {
         feed(&tx, (60..70).map(view));
         feed(&tx, [Msg::Quit]);
         let mut fake = Fake::default();
-        supervise(&options(false, false), &rx, &mut fake, || {});
+        supervise(&options(false), &rx, &mut fake, || {});
         assert_eq!(fake.probes, 0);
     }
 
@@ -172,7 +198,7 @@ mod tests {
         let (tx, rx) = channel();
         feed(&tx, [Msg::Enable(true), view(70), view(71), Msg::Quit]);
         let mut fake = Fake::default();
-        supervise(&options(false, false), &rx, &mut fake, || {});
+        supervise(&options(false), &rx, &mut fake, || {});
         assert_eq!(fake.probes, 1);
     }
 
@@ -185,7 +211,7 @@ mod tests {
             end: Some(|| Ok(SessionEnd::AppQuit)),
             ..Fake::default()
         };
-        supervise(&options(false, false), &rx, &mut fake, || {});
+        supervise(&options(false), &rx, &mut fake, || {});
         assert_eq!(fake.sessions, 1);
         assert_eq!(fake.seen[0].bpm, 88);
         drop(tx);
@@ -200,26 +226,47 @@ mod tests {
             end: Some(|| Ok(SessionEnd::SteamVrQuit)),
             ..Fake::default()
         };
-        let flag = quit.clone();
-        supervise(&options(true, true), &rx, &mut fake, move || flag.set(true));
+        let flag = std::rc::Rc::clone(&quit);
+        supervise(
+            &Options {
+                launched: true,
+                ..options(true)
+            },
+            &rx,
+            &mut fake,
+            move || flag.set(true),
+        );
         assert!(quit.get());
         assert_eq!(fake.sessions, 1);
     }
 
     #[test]
     fn a_failed_session_waits_before_trying_again() {
-        let (tx, rx) = channel();
+        let (_tx, rx) = channel();
         let mut fake = Fake {
             running: true,
             end: Some(|| Err("VRInitError_Init_HmdNotFound".into())),
             ..Fake::default()
         };
-        let quitter = std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(300));
-            tx.send(Msg::Quit).unwrap();
-        });
-        supervise(&options(true, false), &rx, &mut fake, || {});
-        quitter.join().unwrap();
-        assert_eq!(fake.sessions, 1, "the next try waits {AFTER_ERROR:?}");
+        let now = Cell::new(Instant::now());
+        let mut waits = Vec::new();
+        supervise_with(
+            &options(true),
+            &rx,
+            &mut fake,
+            || {},
+            || now.get(),
+            |wait| {
+                waits.push(wait);
+                now.set(now.get() + wait);
+                if waits.len() == 1 {
+                    Err(RecvTimeoutError::Timeout)
+                } else {
+                    Ok(Msg::Quit)
+                }
+            },
+        );
+        assert_eq!(fake.sessions, 2);
+        assert_eq!(waits, [AFTER_ERROR, AFTER_ERROR]);
     }
 }

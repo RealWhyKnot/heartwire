@@ -5,7 +5,6 @@ use serde_json::Value;
 use super::openvr::{self, OpenVr};
 use super::{APP_KEY, LAUNCH_FLAG};
 use crate::config::{Config, Store};
-use crate::log;
 
 const OK: i32 = 0;
 const UNREACHABLE: i32 = 2;
@@ -22,7 +21,7 @@ fn json_string(text: &str) -> String {
     serde_json::Value::String(text.to_owned()).to_string()
 }
 
-pub fn manifest(binary: &str, image: &str) -> String {
+pub(super) fn manifest(binary: &str, image: &str) -> String {
     format!(
         "{{\n  \"source\": \"builtin\",\n  \"applications\": [\n    {{\n      \"app_key\": {},\n      \"launch_type\": \"binary\",\n      \"binary_path_windows\": {},\n      \"arguments\": {},\n      \"is_dashboard_overlay\": true,\n      \"image_path\": {},\n      \"strings\": {{\n        \"en_us\": {{\n          \"name\": \"Heartwire\",\n          \"description\": \"Heart rate to VRChat over OSC\"\n        }}\n      }}\n    }}\n  ]\n}}\n",
         json_string(APP_KEY),
@@ -33,7 +32,8 @@ pub fn manifest(binary: &str, image: &str) -> String {
 }
 
 pub(super) fn write_files(data_dir: &Path) -> Result<(PathBuf, PathBuf), String> {
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let exe = std::env::current_exe()
+        .map_err(|e| format!("locate Heartwire for SteamVR registration: {e}"))?;
     let beside = exe.parent().map(Path::to_path_buf);
     let attempt = |dir: &Path, relative: bool| -> std::io::Result<(PathBuf, PathBuf)> {
         let icon = dir.join(ICON);
@@ -58,7 +58,12 @@ pub(super) fn write_files(data_dir: &Path) -> Result<(PathBuf, PathBuf), String>
     {
         return Ok(found);
     }
-    attempt(data_dir, false).map_err(|e| e.to_string())
+    attempt(data_dir, false).map_err(|e| {
+        format!(
+            "write the SteamVR manifest and icon in {}: {e}. Check that the folder is writable.",
+            data_dir.display()
+        )
+    })
 }
 
 fn same_path(a: &Path, b: &Path) -> bool {
@@ -158,17 +163,17 @@ fn remember(data_dir: &Path, registered: bool) {
 
 fn connect() -> Result<OpenVr, i32> {
     let mut vr = openvr::load_runtime().map_err(|error| {
-        log::write(&format!("steamvr: {error}"));
+        tracing::warn!(error = %error, "steamvr: {error}");
         NOT_INSTALLED
     })?;
     vr.start(openvr::APP_UTILITY).map_err(|error| {
-        log::write(&format!("steamvr: can't reach SteamVR: {error}"));
+        tracing::warn!(error = %error, "steamvr: can't reach SteamVR: {error}");
         UNREACHABLE
     })?;
     Ok(vr)
 }
 
-pub fn register_for_setup(data_dir: &Path) -> i32 {
+pub(super) fn register_for_setup(data_dir: &Path) -> i32 {
     let enabled = std::fs::read_to_string(data_dir.join("config.json"))
         .map(|text| Config::from_json(&text).steamvr_autostart)
         .unwrap_or(false);
@@ -176,13 +181,13 @@ pub fn register_for_setup(data_dir: &Path) -> i32 {
         return OK;
     }
     let Some(registered) = registered() else {
-        log::write("steamvr: SteamVR isn't installed");
+        tracing::info!("steamvr: SteamVR isn't installed");
         return NOT_INSTALLED;
     };
     let manifest = match write_files(data_dir) {
         Ok((manifest, _)) => manifest,
         Err(error) => {
-            log::write(&format!("steamvr: writing the manifest failed: {error}"));
+            tracing::warn!(error = %error, "steamvr: writing the manifest failed: {error}");
             return FAILED;
         }
     };
@@ -198,17 +203,17 @@ pub fn register_for_setup(data_dir: &Path) -> i32 {
     match apply_registration(&vr, true, data_dir) {
         Ok(()) => {
             remember(data_dir, true);
-            log::write("steamvr: added to SteamVR start-up by the installer");
+            tracing::info!("steamvr: added to SteamVR start-up by the installer");
             OK
         }
         Err(error) => {
-            log::write(&format!("steamvr: {error}"));
+            tracing::warn!(error = %error, "steamvr: {error}");
             FAILED
         }
     }
 }
 
-pub fn unregister_for_setup(data_dir: &Path) -> i32 {
+pub(super) fn unregister_for_setup(data_dir: &Path) -> i32 {
     let Some(registered) = registered() else {
         return OK;
     };
@@ -228,22 +233,16 @@ pub fn unregister_for_setup(data_dir: &Path) -> i32 {
     let error = match vr.applications() {
         Ok(apps) => apps.remove_manifest(&stored),
         Err(error) => {
-            log::write(&format!("steamvr: {error}"));
+            tracing::warn!(error = %error, "steamvr: {error}");
             return FAILED;
         }
     };
     if error != 0 {
-        log::write(&format!(
-            "steamvr: removing {} failed ({error})",
-            stored.display()
-        ));
+        tracing::warn!(error = %error, "steamvr: removing {} failed ({error})", stored.display());
         return FAILED;
     }
     remember(data_dir, false);
-    log::write(&format!(
-        "steamvr: removed {} for the uninstaller",
-        stored.display()
-    ));
+    tracing::info!("steamvr: removed {} for the uninstaller", stored.display());
     OK
 }
 
@@ -254,10 +253,8 @@ pub(super) fn apply_registration(vr: &OpenVr, enable: bool, data_dir: &Path) -> 
         let registered = registered().unwrap_or_default();
         for rival in plan(&manifest, &registered, &key_of).rivals {
             let error = apps.remove_manifest(&rival);
-            log::write(&format!(
-                "steamvr: removed another copy's registration {} ({error})",
-                rival.display()
-            ));
+            tracing::warn!(error = %error, "steamvr: removed another copy's registration {} ({error})",
+                    rival.display());
         }
         let error = apps.add_manifest(&manifest);
         if error != 0 {
@@ -311,8 +308,11 @@ mod tests {
                 PathBuf::from(r"D:\C\x.vrmanifest"),
             ]
         );
-        assert!(registered_in("garbage", &read).is_empty());
-        assert!(registered_in(r#"{"config":["C:\\Missing"]}"#, &read).is_empty());
+        assert_eq!(registered_in("garbage", &read).len(), 0);
+        assert_eq!(
+            registered_in(r#"{"config":["C:\\Missing"]}"#, &read).len(),
+            0
+        );
     }
 
     #[test]
@@ -340,7 +340,8 @@ mod tests {
         assert_eq!(plan.ours, Some(registered[2].clone()));
         assert_eq!(plan.rivals, vec![registered[0].clone()]);
         let none = super::plan(Path::new(r"C:\New\heartwire.vrmanifest"), &[], &key_of);
-        assert!(none.ours.is_none() && none.rivals.is_empty());
+        assert!(none.ours.is_none());
+        assert_eq!(none.rivals.len(), 0);
     }
 
     #[test]

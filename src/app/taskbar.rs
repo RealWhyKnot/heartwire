@@ -6,17 +6,17 @@ use slint::{Timer, TimerMode};
 
 use crate::ui::AppWindow;
 
-pub const FLASH: Duration = Duration::from_millis(120);
+pub(crate) const FLASH: Duration = Duration::from_millis(120);
 
 thread_local! {
     static BEAT: RefCell<Option<Rc<Beat>>> = const { RefCell::new(None) };
 }
 
-pub fn install(window: &AppWindow) {
+pub(crate) fn install(window: &AppWindow) {
     BEAT.with(|slot| *slot.borrow_mut() = Some(Beat::new(window)));
 }
 
-pub fn update(connected: bool, bpm: u16) {
+pub(crate) fn update(connected: bool, bpm: u16) {
     BEAT.with(|slot| {
         if let Some(beat) = slot.borrow().as_ref() {
             beat.update(connected, bpm);
@@ -24,11 +24,11 @@ pub fn update(connected: bool, bpm: u16) {
     });
 }
 
-pub fn interval(bpm: u16) -> Option<Duration> {
+pub(crate) fn interval(bpm: u16) -> Option<Duration> {
     (bpm > 0).then(|| Duration::from_millis(60_000 / u64::from(bpm.clamp(20, 300))))
 }
 
-pub struct Beat {
+pub(crate) struct Beat {
     window: slint::Weak<AppWindow>,
     bpm: Cell<u16>,
     connected: Cell<bool>,
@@ -37,7 +37,7 @@ pub struct Beat {
 }
 
 impl Beat {
-    pub fn new(window: &AppWindow) -> Rc<Beat> {
+    pub(crate) fn new(window: &AppWindow) -> Rc<Beat> {
         Rc::new(Beat {
             window: slint::ComponentHandle::as_weak(window),
             bpm: Cell::new(0),
@@ -47,7 +47,7 @@ impl Beat {
         })
     }
 
-    pub fn update(self: &Rc<Self>, connected: bool, bpm: u16) {
+    pub(crate) fn update(self: &Rc<Self>, connected: bool, bpm: u16) {
         self.bpm.set(bpm);
         self.connected.set(connected);
         if connected && interval(bpm).is_some() {

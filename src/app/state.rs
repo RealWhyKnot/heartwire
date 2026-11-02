@@ -8,7 +8,7 @@ use crate::config::{Config, Store};
 use crate::engine::Event;
 use crate::sources::Device;
 
-pub struct App {
+pub(super) struct App {
     config: RefCell<Config>,
     devices: RefCell<Arc<[Device]>>,
     store: Store,
@@ -21,7 +21,7 @@ thread_local! {
 }
 
 impl App {
-    pub fn install(config: Config, store: Store, tx: Sender<Event>) -> Rc<App> {
+    pub(super) fn install(config: Config, store: Store, tx: Sender<Event>) -> Rc<App> {
         let app = Rc::new(App {
             config: RefCell::new(config),
             devices: RefCell::new(Arc::default()),
@@ -29,25 +29,25 @@ impl App {
             tx,
             save_timer: slint::Timer::default(),
         });
-        APP.with(|slot| *slot.borrow_mut() = Some(app.clone()));
+        APP.with(|slot| *slot.borrow_mut() = Some(std::rc::Rc::clone(&app)));
         app
     }
 
-    pub fn with(f: impl FnOnce(&Rc<App>)) {
+    pub(super) fn with(f: impl FnOnce(&Rc<App>)) {
         if let Some(app) = APP.with(|slot| slot.borrow().clone()) {
             f(&app);
         }
     }
 
-    pub fn pinned_device(&self) -> String {
+    pub(super) fn pinned_device(&self) -> String {
         self.config.borrow().bluetooth_device.clone()
     }
 
-    pub fn devices(&self) -> Arc<[Device]> {
+    pub(super) fn devices(&self) -> Arc<[Device]> {
         self.devices.borrow().clone()
     }
 
-    pub fn set_devices(&self, list: Arc<[Device]>) -> bool {
+    pub(super) fn set_devices(&self, list: Arc<[Device]>) -> bool {
         let mut current = self.devices.borrow_mut();
         if Arc::ptr_eq(&current, &list) {
             return false;
@@ -56,19 +56,19 @@ impl App {
         true
     }
 
-    pub fn send(&self, event: Event) {
+    pub(super) fn send(&self, event: Event) {
         let _ = self.tx.send(event);
     }
 
-    pub fn edit(self: &Rc<Self>, delay: Duration, change: impl FnOnce(&mut Config) -> bool) {
+    pub(super) fn edit(self: &Rc<Self>, delay: Duration, change: impl FnOnce(&mut Config) -> bool) {
         let changed = change(&mut self.config.borrow_mut());
         if changed {
             self.commit(delay);
         }
     }
 
-    pub fn commit(self: &Rc<Self>, delay: Duration) {
-        let app = self.clone();
+    pub(super) fn commit(self: &Rc<Self>, delay: Duration) {
+        let app = std::rc::Rc::clone(self);
         let save = move || {
             let config = app.config.borrow().clone();
             app.store.save(&config);
@@ -83,13 +83,13 @@ impl App {
         }
     }
 
-    pub fn flush(&self) {
+    pub(super) fn flush(&self) {
         self.save_timer.stop();
         self.store.save(&self.config.borrow());
     }
 }
 
-pub fn remember_steamvr_registration(state: bool) {
+pub(super) fn remember_steamvr_registration(state: bool) {
     let _ = slint::invoke_from_event_loop(move || {
         App::with(|app| {
             app.edit(Duration::ZERO, |c| {
@@ -140,8 +140,8 @@ mod tests {
             address: "C1:22:33:44:55:66".into(),
         }]
         .into();
-        assert!(app.set_devices(list.clone()));
-        assert!(!app.set_devices(list.clone()));
+        assert!(app.set_devices(std::sync::Arc::clone(&list)));
+        assert!(!app.set_devices(std::sync::Arc::clone(&list)));
         assert_eq!(app.devices().len(), 1);
     }
 
