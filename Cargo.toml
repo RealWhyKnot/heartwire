@@ -4,7 +4,7 @@ version = "0.0.0"
 edition = "2024"
 rust-version = "1.92"
 description = "Heart rate to VRChat over OSC from Bluetooth straps, a Pico bridge, HTTP or Pulsoid"
-license = "GPL-3.0-only"
+license = "GPL-3.0-or-later"
 repository = "https://github.com/RealWhyKnot/heartwire"
 publish = false
 

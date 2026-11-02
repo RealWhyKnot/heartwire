@@ -7,7 +7,7 @@
   <a href="https://github.com/RealWhyKnot/heartwire/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/RealWhyKnot/heartwire?label=release&style=flat-square&labelColor=111827&color=f87171"></a>
   <a href="https://github.com/RealWhyKnot/heartwire/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/RealWhyKnot/heartwire/total?label=downloads&style=flat-square&labelColor=111827&color=f87171"></a>
   <img alt="Windows, Linux and macOS" src="https://img.shields.io/badge/platform-windows%20%7C%20linux%20%7C%20macos-f87171?style=flat-square&labelColor=111827">
-  <a href="LICENSE"><img alt="License: GPL-3.0" src="https://img.shields.io/badge/license-GPL--3.0-f87171?style=flat-square&labelColor=111827"></a>
+  <a href="LICENSE"><img alt="License: GPL-3.0-or-later" src="https://img.shields.io/badge/license-GPL--3.0--or--later-f87171?style=flat-square&labelColor=111827"></a>
 </p>
 
 <p align="center">
@@ -88,4 +88,4 @@ cargo build --release
 
 ## License
 
-GPL-3.0. The font and icon licences are in [NOTICE.md](NOTICE.md).
+GPL-3.0-or-later. The font and icon licences are in [NOTICE.md](NOTICE.md).

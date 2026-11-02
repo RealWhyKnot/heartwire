@@ -1,6 +1,6 @@
 # Third-party notices
 
-Heartwire is under the GNU General Public License v3.0. See `LICENSE`.
+Heartwire is under the GNU General Public License, version 3 or (at your option) any later version. See `LICENSE`.
 
 ## Nunito
 
@@ -37,4 +37,4 @@ SOFTWARE.
 ## Slint
 
 The interface uses Slint (https://slint.dev) under the GNU General Public
-License v3.0.
+License v3.0 only, so the built app is distributed under GPL-3.0.
