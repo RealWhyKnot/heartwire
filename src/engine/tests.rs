@@ -140,7 +140,10 @@ struct Running {
 
 impl Running {
     fn start(config: Config) -> Running {
-        Self::start_with(config, run)
+        Self::start_with(config, |config, rx, _, ui| {
+            let (source_tx, _source_events) = mpsc::channel();
+            run(config, rx, source_tx, ui);
+        })
     }
 
     fn start_with(
@@ -215,7 +218,7 @@ fn a_device_list_is_shown_once_and_shared_not_copied() {
         });
     }
     let views = engine.finish();
-    assert_eq!(views.len(), 2);
+    assert_eq!(views.len(), 2, "{views:#?}");
     assert_eq!(&*views[1].devices, list.as_slice());
 }
 

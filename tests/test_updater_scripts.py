@@ -15,7 +15,7 @@ class UpdaterSyntaxTests(unittest.TestCase):
 
     def test_bash_parser_and_shellcheck(self) -> None:
         root = Path(__file__).resolve().parents[1]
-        prefix = (
+        prefix: list[str] = (
             ["wsl", "--distribution", os.environ["LINT_WSL_DISTRO"], "--cd", str(root), "--"] if os.name == "nt" else []
         )
         arguments = [
