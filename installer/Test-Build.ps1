@@ -172,7 +172,7 @@ function Test-Installed {
     $target = ''
     $workingDir = ''
     if (Test-Path -LiteralPath $shortcut) {
-        $link = (New-Object -ComObject WScript.Shell).CreateShortcut($shortcut)
+        $link = [Activator]::CreateInstance([type]::GetTypeFromProgID('WScript.Shell')).CreateShortcut($shortcut)
         $target = $link.TargetPath
         $workingDir = $link.WorkingDirectory
     }

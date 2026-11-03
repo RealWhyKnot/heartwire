@@ -14,3 +14,10 @@ updates:
       include: scope
     schedule:
       interval: weekly
+  - package-ecosystem: pip
+    directory: /
+    commit-message:
+      prefix: chore
+      include: scope
+    schedule:
+      interval: weekly
