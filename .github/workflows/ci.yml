@@ -47,9 +47,8 @@ jobs:
             libssl-dev libfontconfig1-dev libxkbcommon-dev
           python -m pip install -r requirements-dev.txt
 
-      - name: Install PSScriptAnalyzer
-        shell: pwsh
-        run: Install-PSResource -Name PSScriptAnalyzer -Version 1.25.0 -TrustRepository -Quiet
+      - name: Set up PSScriptAnalyzer
+        uses: RealWhyKnot/workflows/setup-pssa@v1
 
       - name: Set up Rust
         uses: RealWhyKnot/workflows/setup-rust@v1
