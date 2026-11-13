@@ -112,7 +112,7 @@ jobs:
       - name: Set up Rust
         uses: RealWhyKnot/workflows/setup-rust@v1
         with:
-          toolchain: stable
+          toolchain: '1.100.0'
           targets: ${{ matrix.target }}
           cache-key: cargo-release-${{ matrix.rid }}
 

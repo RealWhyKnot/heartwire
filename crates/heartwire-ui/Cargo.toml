@@ -2,7 +2,7 @@
 name = "heartwire-ui"
 version = "0.0.0"
 edition = "2024"
-rust-version = "1.99"
+rust-version = "1.100"
 license = "GPL-3.0-or-later"
 publish = false
 
@@ -11,3 +11,5 @@ slint.workspace = true
 
 [build-dependencies]
 slint-build.workspace = true
+
+[lints]

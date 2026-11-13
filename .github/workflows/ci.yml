@@ -53,7 +53,7 @@ jobs:
       - name: Set up Rust
         uses: RealWhyKnot/workflows/setup-rust@v1
         with:
-          toolchain: '1.99.1'
+          toolchain: '1.100.0'
           components: rustfmt, clippy
           cache-key: cargo-style
 
@@ -87,7 +87,7 @@ jobs:
       - name: Set up Rust
         uses: RealWhyKnot/workflows/setup-rust@v1
         with:
-          toolchain: '1.99.1'
+          toolchain: '1.100.0'
           components: rustfmt, clippy
           cache-key: cargo-ci
 
