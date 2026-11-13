@@ -85,8 +85,8 @@ impl Store {
         };
         let tmp = self.path.with_extension("json.tmp");
         let result = std::fs::create_dir_all(self.path.parent().unwrap_or(Path::new(".")))
-            .and_then(|_| std::fs::write(&tmp, text + "\n"))
-            .and_then(|_| std::fs::rename(&tmp, &self.path));
+            .and_then(|()| std::fs::write(&tmp, text + "\n"))
+            .and_then(|()| std::fs::rename(&tmp, &self.path));
         if let Err(error) = result {
             tracing::error!(error = %error, "saving settings: {error}");
         }

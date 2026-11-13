@@ -119,7 +119,7 @@ impl OpenVr {
     pub(super) fn start(&mut self, kind: i32) -> Result<(), String> {
         let mut error = 0i32;
         // SAFETY: init belongs to the loaded module; error is writable and the optional startup string is null.
-        unsafe { (self.init)(&mut error, kind, std::ptr::null()) };
+        unsafe { (self.init)(&raw mut error, kind, std::ptr::null()) };
         if error != 0 {
             return Err(self.describe(error));
         }
@@ -143,7 +143,7 @@ impl OpenVr {
         let name = cstr(&format!("FnTable:{version}"));
         let mut error = 0i32;
         // SAFETY: name is a live terminated string and error is a writable SDK error output.
-        let raw = unsafe { (self.interface)(name.as_ptr(), &mut error) };
+        let raw = unsafe { (self.interface)(name.as_ptr(), &raw mut error) };
         if error != 0 || raw == 0 {
             return Err(format!("{version}: {}", self.describe(error)));
         }
@@ -282,8 +282,8 @@ impl Overlay<'_> {
                 .get::<CreateDashboardFn>(overlay::CREATE_DASHBOARD)(
                 key.as_ptr(),
                 name.as_ptr(),
-                &mut main,
-                &mut thumb,
+                &raw mut main,
+                &raw mut thumb,
             )
         };
         if error == 0 {

@@ -160,7 +160,24 @@ fn devices() -> Vec<Device> {
 }
 
 pub(super) fn all() -> Result<Vec<Case>, String> {
-    let cases = vec![
+    let mut cases = timing_cases()?;
+    cases.extend(source_cases()?);
+    cases.extend(data_cases());
+    cases.extend(system_cases());
+    #[cfg(windows)]
+    cases.push(Case::new(
+        "platform",
+        "check whether SteamVR runs",
+        20 * MS,
+        || {
+            black_box(crate::platform::process_running("vrserver.exe"));
+        },
+    ));
+    Ok(cases)
+}
+
+fn timing_cases() -> Result<Vec<Case>, String> {
+    Ok(vec![
         Case::new("core", "parse a BLE heart rate packet", 100 * NS, || {
             black_box(
                 crate::heart_rate::parse_measurement(black_box(&[0x16, 72, 0x10, 0x03]))
@@ -201,6 +218,11 @@ pub(super) fn all() -> Result<Vec<Case>, String> {
             let mut pipeline = Pipeline::start()?;
             move || pipeline.reading()
         }),
+    ])
+}
+
+fn source_cases() -> Result<Vec<Case>, String> {
+    Ok(vec![
         Case::new("sources", "parse an HTTP POST", 2 * US, || {
             black_box(sources::http::parse_request(black_box(
                 b"POST / HTTP/1.1\r\nHost: localhost:8080\r\nContent-Length: 2\r\nContent-Type: application/x-www-form-urlencoded\r\n\r\n60",
@@ -257,6 +279,11 @@ pub(super) fn all() -> Result<Vec<Case>, String> {
                 black_box(&rx);
             }
         }),
+    ])
+}
+
+fn data_cases() -> Vec<Case> {
+    vec![
         Case::new("firmware", "build the firmware upload script", MS, || {
             black_box(sources::pico::write_file_script(
                 "main.py",
@@ -300,6 +327,11 @@ pub(super) fn all() -> Result<Vec<Case>, String> {
                 black_box(Sha256::digest(&data));
             }
         }),
+    ]
+}
+
+fn system_cases() -> Vec<Case> {
+    vec![
         Case::new("app", "build 12 device rows", 50 * US, {
             let list = devices();
             move || {
@@ -321,17 +353,5 @@ pub(super) fn all() -> Result<Vec<Case>, String> {
         Case::new("net", "build an HTTPS agent", 20 * MS, || {
             black_box(crate::net::agent(Duration::from_secs(5)));
         }),
-    ];
-    #[cfg(windows)]
-    let mut cases = cases;
-    #[cfg(windows)]
-    cases.push(Case::new(
-        "platform",
-        "check whether SteamVR runs",
-        20 * MS,
-        || {
-            black_box(crate::platform::process_running("vrserver.exe"));
-        },
-    ));
-    Ok(cases)
+    ]
 }

@@ -1,5 +1,6 @@
 use num_traits::ToPrimitive;
 
+use std::fmt::Write as _;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -115,11 +116,13 @@ pub(crate) fn download(
     if total != size {
         return Err(format!("{archive} is {total} bytes, expected {size}"));
     }
-    let actual: String = hasher
+    let actual = hasher
         .finalize()
         .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect();
+        .fold(String::new(), |mut hex, byte| {
+            write!(hex, "{byte:02x}").expect("writing to a String cannot fail");
+            hex
+        });
     if actual != hash {
         return Err(format!("{archive} sha256 {actual} does not match {hash}"));
     }

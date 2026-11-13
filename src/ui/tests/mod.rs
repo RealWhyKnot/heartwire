@@ -221,7 +221,7 @@ fn texts(app: &AppWindow) -> Vec<ElementHandle> {
         .match_predicate(|e| {
             matches!(
                 e.type_name().as_deref(),
-                Some("Text") | Some("TextInput") | Some("Label")
+                Some("Text" | "TextInput" | "Label")
             )
         })
         .find_all()

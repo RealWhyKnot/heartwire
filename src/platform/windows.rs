@@ -38,7 +38,7 @@ pub(super) fn autostart_value() -> Option<String> {
             RRF_RT_REG_SZ,
             std::ptr::null_mut(),
             std::ptr::null_mut(),
-            &mut bytes,
+            &raw mut bytes,
         )
     };
     if status != ERROR_SUCCESS || bytes < 2 {
@@ -54,7 +54,7 @@ pub(super) fn autostart_value() -> Option<String> {
             RRF_RT_REG_SZ,
             std::ptr::null_mut(),
             buf.as_mut_ptr().cast(),
-            &mut bytes,
+            &raw mut bytes,
         )
     };
     if status != ERROR_SUCCESS {
@@ -125,10 +125,10 @@ pub(crate) fn process_running(name: &str) -> bool {
         entry.dwSize = u32::try_from(std::mem::size_of::<PROCESSENTRY32W>())
             .expect("PROCESSENTRY32W has a fixed DWORD size");
         let mut found = false;
-        let mut more = Process32FirstW(snapshot, &mut entry) != 0;
+        let mut more = Process32FirstW(snapshot, &raw mut entry) != 0;
         while more && !found {
             found = same_name(&entry.szExeFile, name);
-            more = Process32NextW(snapshot, &mut entry) != 0;
+            more = Process32NextW(snapshot, &raw mut entry) != 0;
         }
         CloseHandle(snapshot);
         found
@@ -145,7 +145,8 @@ pub(crate) fn serial_ports_key() -> Option<Vec<u16>> {
     let path = wide(r"HARDWARE\DEVICEMAP\SERIALCOMM");
     let mut key: HKEY = std::ptr::null_mut();
     // SAFETY: path is terminated UTF-16 and key is a writable handle output.
-    let status = unsafe { RegOpenKeyExW(HKEY_LOCAL_MACHINE, path.as_ptr(), 0, KEY_READ, &mut key) };
+    let status =
+        unsafe { RegOpenKeyExW(HKEY_LOCAL_MACHINE, path.as_ptr(), 0, KEY_READ, &raw mut key) };
     if status == ERROR_FILE_NOT_FOUND {
         return Some(Vec::new());
     }
@@ -166,11 +167,11 @@ pub(crate) fn serial_ports_key() -> Option<Vec<u16>> {
                 key,
                 index,
                 name.as_mut_ptr(),
-                &mut name_len,
+                &raw mut name_len,
                 std::ptr::null(),
                 std::ptr::null_mut(),
                 data.as_mut_ptr().cast(),
-                &mut data_len,
+                &raw mut data_len,
             )
         };
         if status == ERROR_NO_MORE_ITEMS {
@@ -263,11 +264,14 @@ mod tests {
         claim_app_id();
         let mut id = std::ptr::null_mut();
         // SAFETY: id is a writable output for the allocated application identifier.
-        let result = unsafe { GetCurrentProcessExplicitAppUserModelID(&mut id) };
+        let result = unsafe { GetCurrentProcessExplicitAppUserModelID(&raw mut id) };
         assert_eq!(result, 0);
         // SAFETY: the successful call returned terminated UTF-16 allocated for CoTaskMemFree.
         let text = unsafe {
-            let len = (0..).take_while(|&i| *id.add(i) != 0).count();
+            let mut len = 0;
+            while *id.add(len) != 0 {
+                len += 1;
+            }
             let text = String::from_utf16_lossy(std::slice::from_raw_parts(id, len));
             CoTaskMemFree(id.cast());
             text

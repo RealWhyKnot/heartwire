@@ -43,6 +43,7 @@ impl PortWatch {
 mod tests {
     use super::*;
     use std::cell::Cell;
+    use std::io::Write;
 
     #[test]
     fn ports_are_enumerated_only_when_the_port_list_changes_or_goes_stale() {
@@ -100,7 +101,6 @@ mod tests {
             std::hint::black_box(super::super::find_port());
         }
         let full = start.elapsed() / 20;
-        use std::io::Write;
         writeln!(
             std::io::stdout().lock(),
             "port list key {key:?}, full enumeration {full:?}"

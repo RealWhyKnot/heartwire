@@ -4,13 +4,20 @@ pub(super) type Setup = Box<dyn Fn(&AppWindow)>;
 
 pub(super) fn scenes() -> Vec<(String, Setup)> {
     let mut out: Vec<(String, Setup)> = Vec::new();
-    let mut add = |name: &str, setup: Setup| out.push((name.to_owned(), setup));
+    home_scenes(&mut out);
+    settings_scenes(&mut out);
+    option_scenes(&mut out);
+    about_scenes(&mut out);
+    out
+}
 
+fn home_scenes(out: &mut Vec<(String, Setup)>) {
+    let mut add = |name: &str, setup: Setup| out.push((name.to_owned(), setup));
     add(
         "home-idle",
         Box::new(|a| {
             a.global::<HeartRate>()
-                .set_status("Waiting for a Pico".into())
+                .set_status("Waiting for a Pico".into());
         }),
     );
     add(
@@ -29,10 +36,13 @@ pub(super) fn scenes() -> Vec<(String, Setup)> {
         Box::new(|a| {
             a.global::<HeartRate>().set_status(
                 "The Pico is silent. Install the firmware in Settings > Pico and wait".into(),
-            )
+            );
         }),
     );
+}
 
+fn settings_scenes(out: &mut Vec<(String, Setup)>) {
+    let mut add = |name: &str, setup: Setup| out.push((name.to_owned(), setup));
     let tabs: [(i32, &[&str]); 5] = [
         (0, &["general", "bluetooth", "pico", "osc", "parameters"]),
         (1, &["general", "bluetooth", "osc", "parameters"]),
@@ -116,6 +126,10 @@ pub(super) fn scenes() -> Vec<(String, Setup)> {
             );
         }),
     );
+}
+
+fn option_scenes(out: &mut Vec<(String, Setup)>) {
+    let mut add = |name: &str, setup: Setup| out.push((name.to_owned(), setup));
     add(
         "general-unchecked",
         Box::new(|a| {
@@ -148,6 +162,10 @@ pub(super) fn scenes() -> Vec<(String, Setup)> {
         "welcome",
         Box::new(|a| a.global::<crate::ui::Welcome>().set_shown(true)),
     );
+}
+
+fn about_scenes(out: &mut Vec<(String, Setup)>) {
+    let mut add = |name: &str, setup: Setup| out.push((name.to_owned(), setup));
     add("about", Box::new(|a| a.global::<Navigation>().set_page(2)));
     add(
         "about-beta",
@@ -183,7 +201,6 @@ pub(super) fn scenes() -> Vec<(String, Setup)> {
             );
         }),
     );
-    out
 }
 
 pub(super) fn each_scene(mut check: impl FnMut(&str, &AppWindow, &Frame)) {

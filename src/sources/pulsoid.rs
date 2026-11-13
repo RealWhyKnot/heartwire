@@ -33,8 +33,7 @@ pub(crate) fn run(ctx: &Context, widget: &str) {
 fn socket_url(widget: &str) -> Result<String, String> {
     let id = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0)
+        .map_or(0, |d| d.as_nanos())
         .to_string();
     let body = serde_json::json!({
         "id": id,

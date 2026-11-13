@@ -42,11 +42,7 @@ pub(crate) fn parse_request(buf: &[u8]) -> Request {
     }
     match method {
         "GET" | "HEAD" => Request::Get,
-        "POST" | "PUT" if chunked => match dechunk(body) {
-            Some(Some(data)) => Request::Post(data),
-            Some(None) => Request::Incomplete,
-            None => Request::Bad,
-        },
+        "POST" | "PUT" if chunked => dechunk(body),
         "POST" | "PUT" => {
             let n = length.unwrap_or(0);
             if body.len() < n {
@@ -60,28 +56,33 @@ pub(crate) fn parse_request(buf: &[u8]) -> Request {
     }
 }
 
-fn dechunk(mut body: &[u8]) -> Option<Option<Vec<u8>>> {
+fn dechunk(mut body: &[u8]) -> Request {
     let mut out = Vec::new();
     loop {
         let Some(line_end) = find(body, b"\r\n") else {
-            return Some(None);
+            return Request::Incomplete;
         };
-        let size_text = std::str::from_utf8(&body[..line_end]).ok()?;
-        let size_text = size_text.split(';').next()?.trim();
-        let size = usize::from_str_radix(size_text, 16).ok()?;
+        let Some(size) = chunk_size(&body[..line_end]) else {
+            return Request::Bad;
+        };
         if size > MAX_REQUEST || out.len() + size > MAX_REQUEST {
-            return None;
+            return Request::Bad;
         }
         body = &body[line_end + 2..];
         if size == 0 {
-            return Some(Some(out));
+            return Request::Post(out);
         }
         if body.len() < size + 2 {
-            return Some(None);
+            return Request::Incomplete;
         }
         out.extend_from_slice(&body[..size]);
         body = &body[size + 2..];
     }
+}
+
+fn chunk_size(line: &[u8]) -> Option<usize> {
+    let text = std::str::from_utf8(line).ok()?;
+    usize::from_str_radix(text.split(';').next()?.trim(), 16).ok()
 }
 
 fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {

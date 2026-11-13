@@ -54,7 +54,7 @@ fn taskbars() -> Vec<RECT> {
                 bottom: 0,
             };
             // SAFETY: rect is writable and bar is the nonnull handle returned by window enumeration.
-            if unsafe { GetWindowRect(bar, &mut rect) } != 0
+            if unsafe { GetWindowRect(bar, &raw mut rect) } != 0
                 && rect.right > rect.left
                 && rect.bottom > rect.top
             {
@@ -94,7 +94,7 @@ fn capture(rect: &RECT) -> Vec<u8> {
             0,
             u32::try_from(h).expect("the taskbar rectangle has positive height"),
             pixels.as_mut_ptr().cast(),
-            &mut info,
+            &raw mut info,
             DIB_RGB_COLORS,
         );
         SelectObject(memory, old);
@@ -168,14 +168,55 @@ fn post(port: u16, bpm: u16) -> bool {
     stream.write_all(request.as_bytes()).is_ok()
 }
 
+fn write_config(data: &Path, port: u16, osc_port: u16) {
+    std::fs::write(
+        data.join("config.json"),
+        format!(
+            r#"{{"service_type":"http","http_server_port":{port},"osc_client_port":{osc_port},"check_updates":false,"steamvr_autostart":false}}"#
+        ),
+    )
+    .unwrap();
+}
+
+fn feed(port: u16) -> (Arc<AtomicBool>, std::thread::JoinHandle<()>) {
+    let feeding = Arc::new(AtomicBool::new(true));
+    let running = Arc::clone(&feeding);
+    let feeder = std::thread::spawn(move || {
+        while running.load(Ordering::Relaxed) {
+            post(port, 120);
+            std::thread::sleep(Duration::from_millis(500));
+        }
+    });
+    (feeding, feeder)
+}
+
+fn sample(bars: &[RECT], length: Duration) -> (Vec<usize>, Vec<usize>) {
+    let mut beat = Vec::new();
+    let mut still = Vec::new();
+    let end = Instant::now() + length;
+    while Instant::now() < end {
+        let (mut beat_pixels, mut still_pixels) = (0, 0);
+        for bar in bars {
+            let pixels = capture(bar);
+            beat_pixels += count(&pixels, BEAT);
+            still_pixels += count(&pixels, STILL);
+        }
+        beat.push(beat_pixels);
+        still.push(still_pixels);
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    (beat, still)
+}
+
 #[test]
 #[ignore = "needs an interactive Windows desktop with a visible taskbar"]
 fn the_taskbar_icon_beats_when_a_start_menu_shortcut_points_at_the_exe() {
     // SAFETY: the DPI context is the SDK's predefined process-awareness constant.
     unsafe { SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
-    let source = std::env::var_os("HEARTWIRE_EXE")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(env!("CARGO_BIN_EXE_heartwire")));
+    let source = std::env::var_os("HEARTWIRE_EXE").map_or_else(
+        || PathBuf::from(env!("CARGO_BIN_EXE_heartwire")),
+        PathBuf::from,
+    );
     let root = std::env::temp_dir().join(format!("heartwire-taskbar-{}", std::process::id()));
     let mut scratch = Scratch {
         root: root.clone(),
@@ -204,13 +245,7 @@ fn the_taskbar_icon_beats_when_a_start_menu_shortcut_points_at_the_exe() {
     let osc = UdpSocket::bind("127.0.0.1:0").unwrap();
     osc.set_nonblocking(true).unwrap();
     let osc_port = osc.local_addr().unwrap().port();
-    std::fs::write(
-        data.join("config.json"),
-        format!(
-            r#"{{"service_type":"http","http_server_port":{port},"osc_client_port":{osc_port},"check_updates":false,"steamvr_autostart":false}}"#
-        ),
-    )
-    .unwrap();
+    write_config(&data, port, osc_port);
     if !in_place && std::env::var_os("HEARTWIRE_NO_SHORTCUT").is_none() {
         scratch.shortcut = Some(start_menu_shortcut(
             &format!("Heartwire taskbar test {}", std::process::id()),
@@ -236,33 +271,11 @@ fn the_taskbar_icon_beats_when_a_start_menu_shortcut_points_at_the_exe() {
         assert!(Instant::now() < deadline, "the HTTP source never listened");
         std::thread::sleep(Duration::from_millis(100));
     }
-    let feeding = Arc::new(AtomicBool::new(true));
-    let feeder = {
-        let feeding = std::sync::Arc::clone(&feeding);
-        std::thread::spawn(move || {
-            while feeding.load(Ordering::Relaxed) {
-                post(port, 120);
-                std::thread::sleep(Duration::from_millis(500));
-            }
-        })
-    };
+    let (feeding, feeder) = feed(port);
     std::thread::sleep(Duration::from_millis(1500));
     let bars = taskbars();
     assert!(!bars.is_empty(), "no taskbar found");
-    let mut beat = Vec::new();
-    let mut still = Vec::new();
-    let end = Instant::now() + Duration::from_secs(6);
-    while Instant::now() < end {
-        let (mut b, mut s) = (0, 0);
-        for bar in &bars {
-            let pixels = capture(bar);
-            b += count(&pixels, BEAT);
-            s += count(&pixels, STILL);
-        }
-        beat.push(b);
-        still.push(s);
-        std::thread::sleep(Duration::from_millis(25));
-    }
+    let (beat, still) = sample(&bars, Duration::from_secs(6));
     feeding.store(false, Ordering::Relaxed);
     feeder.join().unwrap();
     let mut packet = [0u8; 128];

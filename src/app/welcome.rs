@@ -31,20 +31,19 @@ pub(super) fn offer(window: &AppWindow, app: &Rc<App>, hr_osc: Option<PathBuf>) 
             let Some(w) = weak.upgrade() else {
                 return;
             };
-            match read_hr_osc(&path) {
-                Some(imported) => {
-                    let mut applied = None;
-                    app.edit(Duration::ZERO, |current| {
-                        *current = carry_over(current, imported);
-                        applied = Some(current.clone());
-                        true
-                    });
-                    if let Some(config) = applied {
-                        settings::load(&w, &config);
-                    }
-                    tracing::info!("imported settings from hr-osc");
+            if let Some(imported) = read_hr_osc(&path) {
+                let mut applied = None;
+                app.edit(Duration::ZERO, |current| {
+                    *current = carry_over(current, imported);
+                    applied = Some(current.clone());
+                    true
+                });
+                if let Some(config) = applied {
+                    settings::load(&w, &config);
                 }
-                None => tracing::warn!("hr-osc settings could not be read"),
+                tracing::info!("imported settings from hr-osc");
+            } else {
+                tracing::warn!("hr-osc settings could not be read");
             }
             w.global::<Welcome>().set_shown(false);
         });

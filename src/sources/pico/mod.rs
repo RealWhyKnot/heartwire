@@ -49,15 +49,12 @@ pub(crate) fn find_port() -> Option<String> {
 pub(crate) fn run(ctx: &Context) {
     let mut watch = PortWatch::default();
     while !ctx.stopped() {
-        match watch.find() {
-            Some(port) => {
-                session(ctx, &port);
-                watch.forget();
-            }
-            None => {
-                ctx.status("Waiting for a Pico");
-                ctx.sleep(RETRY);
-            }
+        if let Some(port) = watch.find() {
+            session(ctx, &port);
+            watch.forget();
+        } else {
+            ctx.status("Waiting for a Pico");
+            ctx.sleep(RETRY);
         }
     }
 }

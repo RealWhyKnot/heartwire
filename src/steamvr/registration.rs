@@ -175,8 +175,7 @@ fn connect() -> Result<OpenVr, i32> {
 
 pub(super) fn register_for_setup(data_dir: &Path) -> i32 {
     let enabled = std::fs::read_to_string(data_dir.join("config.json"))
-        .map(|text| Config::from_json(&text).steamvr_autostart)
-        .unwrap_or(false);
+        .is_ok_and(|text| Config::from_json(&text).steamvr_autostart);
     if !enabled {
         return OK;
     }

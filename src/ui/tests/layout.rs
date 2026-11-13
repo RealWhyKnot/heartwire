@@ -172,19 +172,21 @@ fn every_tab_keeps_the_same_rhythm() {
             .match_predicate(|e| {
                 matches!(
                     e.type_name().as_deref(),
-                    Some("Label")
-                        | Some("Field")
-                        | Some("Select")
-                        | Some("SmallButton")
-                        | Some("Check")
-                        | Some("Text")
-                        | Some("Rectangle")
+                    Some(
+                        "Label"
+                            | "Field"
+                            | "Select"
+                            | "SmallButton"
+                            | "Check"
+                            | "Text"
+                            | "Rectangle"
+                    )
                 )
             })
             .find_all()
             .iter()
             .map(rect)
-            .filter(|r| r.x == 114.0 && r.h > 2.0 && r.y >= 40.0)
+            .filter(|r| (r.x - 114.0).abs() < f32::EPSILON && r.h > 2.0 && r.y >= 40.0)
             .collect();
         found.sort_by(|a, b| a.y.total_cmp(&b.y).then(b.h.total_cmp(&a.h)));
         let mut rows: Vec<Rect> = Vec::new();
@@ -202,7 +204,7 @@ fn every_tab_keeps_the_same_rhythm() {
         for pair in rows.windows(2) {
             let gap = pair[1].y - pair[0].bottom();
             assert!(
-                gap == 8.0 || gap == 18.0,
+                (gap - 8.0).abs() < f32::EPSILON || (gap - 18.0).abs() < f32::EPSILON,
                 "{name}: {gap}px between {:?} and {:?}",
                 pair[0],
                 pair[1]

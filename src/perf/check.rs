@@ -19,7 +19,7 @@ pub(super) fn run() -> Result<(), String> {
         .iter()
         .map(|timing| (timing.group, timing.name))
         .collect();
-    names.sort();
+    names.sort_unstable();
     names.dedup();
     if names.len() != timings.len() {
         return Err("case names are not unique".into());

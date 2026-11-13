@@ -96,7 +96,8 @@ impl Log {
 }
 
 pub(crate) fn init(dir: &Path) {
-    *LOG.lock().unwrap_or_else(|e| e.into_inner()) = Some(Log::open(dir, MAX_BYTES));
+    *LOG.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(Log::open(dir, MAX_BYTES));
 }
 
 pub(crate) fn catch_panics() {
@@ -140,8 +141,7 @@ fn last_words_after(slot: &Mutex<Option<Log>>, line: &str, mut retry: impl FnMut
 fn now() -> String {
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
+        .map_or(0, |d| d.as_secs());
     timestamp(secs)
 }
 
@@ -150,7 +150,11 @@ pub(crate) fn write(message: &str) {
     if cfg!(debug_assertions) {
         let _ = std::io::stderr().lock().write_all(line.as_bytes());
     }
-    if let Some(log) = LOG.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
+    if let Some(log) = LOG
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .as_mut()
+    {
         log.line(&line);
     }
 }
@@ -251,7 +255,9 @@ mod tests {
         let (release, released) = std::sync::mpsc::channel();
         let (unlocked, ready) = std::sync::mpsc::channel();
         let holder = std::thread::spawn(move || {
-            let held = busy.lock().unwrap_or_else(|e| e.into_inner());
+            let held = busy
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             acquired.send(()).unwrap();
             released.recv().unwrap();
             drop(held);

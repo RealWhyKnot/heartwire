@@ -122,7 +122,7 @@ async fn find(
                 address: identity(props.address, peripheral.id()),
             };
             let heart_rate = wanted.is_empty() || props.services.contains(&HR_SERVICE);
-            if !heart_rate && !(matches(&device, wanted) && !device.name.is_empty()) {
+            if !heart_rate && (!matches(&device, wanted) || device.name.is_empty()) {
                 continue;
             }
             seen.push(device.clone());
@@ -207,11 +207,11 @@ async fn stream(ctx: &Context, adapter: &Adapter, peripheral: Peripheral, label:
                 None => break,
                 _ => {}
             },
-            _ = ctx.stop_signal() => {
+            () = ctx.stop_signal() => {
                 let _ = peripheral.disconnect().await;
                 return;
             }
-            _ = tokio::time::sleep_until(check) => {
+            () = tokio::time::sleep_until(check) => {
                 if !peripheral.is_connected().await.unwrap_or(false) {
                     break;
                 }
@@ -245,14 +245,14 @@ async fn subscribe(ctx: &Context, peripheral: &Peripheral) -> Option<btleplug::R
 async fn guarded<F: Future>(ctx: &Context, work: F) -> Option<F::Output> {
     tokio::select! {
         out = work => Some(out),
-        _ = ctx.stop_signal() => None,
+        () = ctx.stop_signal() => None,
     }
 }
 
 async fn pause(ctx: &Context, duration: Duration) -> bool {
     tokio::select! {
-        _ = tokio::time::sleep(duration) => ctx.stopped(),
-        _ = ctx.stop_signal() => true,
+        () = tokio::time::sleep(duration) => ctx.stopped(),
+        () = ctx.stop_signal() => true,
     }
 }
 

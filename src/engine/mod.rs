@@ -2,6 +2,7 @@
 mod tests;
 mod view;
 
+use std::sync::Arc;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 use std::time::{Duration, Instant};
 
@@ -54,7 +55,9 @@ impl<U: Ui, N: Fn() -> Instant> Engine<U, N> {
         let percent = percent(bpm, self.config.max_heart_rate);
         self.osc
             .send(&self.config.osc_path_percent, Arg::Float(percent));
-        let changed = !self.view.connected || self.view.bpm != bpm || self.view.percent != percent;
+        let changed = !self.view.connected
+            || self.view.bpm != bpm
+            || self.view.percent.to_bits() != percent.to_bits();
         self.set_connected(true);
         self.view.bpm = bpm;
         self.view.percent = percent;
@@ -82,7 +85,7 @@ impl<U: Ui, N: Fn() -> Instant> Engine<U, N> {
             changed = true;
         }
         let percent = percent(self.view.bpm, self.config.max_heart_rate);
-        if percent != self.view.percent {
+        if percent.to_bits() != self.view.percent.to_bits() {
             self.view.percent = percent;
             changed = true;
         }
@@ -97,7 +100,7 @@ impl<U: Ui, N: Fn() -> Instant> Engine<U, N> {
             self.set_connected(false);
         }
         self.view.status.clear();
-        self.view.devices = Default::default();
+        self.view.devices = Arc::default();
         self.view.notice.clear();
         self.start_source();
     }

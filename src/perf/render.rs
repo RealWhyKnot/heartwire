@@ -81,7 +81,7 @@ impl Screen {
         });
     }
 
-    fn advance(&self, by: Duration) {
+    fn advance(by: Duration) {
         NOW.with(|now| now.set(now.get() + by));
     }
 }
@@ -102,14 +102,14 @@ fn window_cases(screen: &Rc<RefCell<Screen>>) -> Vec<Case> {
     let ping = move || {
         let mut s = s.borrow_mut();
         setup(&s, 0, true, true);
-        s.advance(Duration::from_millis(33));
+        Screen::advance(Duration::from_millis(33));
         s.frame(false);
     };
     let s = std::rc::Rc::clone(screen);
     let hidden_ping = move || {
         let mut s = s.borrow_mut();
         setup(&s, 0, true, false);
-        s.advance(Duration::from_millis(33));
+        Screen::advance(Duration::from_millis(33));
         s.frame(false);
     };
     let s = std::rc::Rc::clone(screen);

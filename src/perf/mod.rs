@@ -169,25 +169,32 @@ pub(crate) fn report(timings: &[Timing], out: &mut dyn Write) -> std::io::Result
     writeln!(out, "{} cases, {over} over budget", timings.len())
 }
 
-pub(crate) fn requested() -> Option<Option<PathBuf>> {
+pub(crate) enum Destination {
+    Stdout,
+    File(PathBuf),
+}
+
+pub(crate) fn requested() -> Option<Destination> {
     let mut args = std::env::args().skip_while(|a| a != FLAG);
     args.next()?;
     Some(
         args.next()
             .filter(|a| !a.starts_with("--"))
-            .map(PathBuf::from),
+            .map_or(Destination::Stdout, |path| {
+                Destination::File(PathBuf::from(path))
+            }),
     )
 }
 
-pub(crate) fn main(target: Option<PathBuf>) -> Result<(), String> {
+pub(crate) fn main(destination: Destination) -> Result<(), String> {
     let timings = run_all(Settings::FULL)?;
     let mut text = Vec::new();
     report(&timings, &mut text)
         .map_err(|error| format!("format the performance report: {error}"))?;
-    match target {
-        Some(path) => std::fs::write(&path, &text)
+    match destination {
+        Destination::File(path) => std::fs::write(&path, &text)
             .map_err(|error| format!("writing {}: {error}", path.display())),
-        None => std::io::stdout()
+        Destination::Stdout => std::io::stdout()
             .lock()
             .write_all(&text)
             .map_err(|error| format!("write the performance report to stdout: {error}")),

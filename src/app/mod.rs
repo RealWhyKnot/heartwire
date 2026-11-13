@@ -79,8 +79,8 @@ fn show(window: &AppWindow, minimized: bool) -> bool {
 }
 
 pub fn run() {
-    if let Some(target) = crate::perf::requested() {
-        if let Err(error) = crate::perf::main(target) {
+    if let Some(destination) = crate::perf::requested() {
+        if let Err(error) = crate::perf::main(destination) {
             use std::io::Write;
             let _ = writeln!(std::io::stderr().lock(), "{error}");
         }
@@ -139,7 +139,7 @@ pub fn run() {
         .name("engine".into())
         .stack_size(256 * 1024)
         .spawn(move || engine::run(engine_config, &rx, engine_tx, bridge))
-        .expect("engine thread");
+        .expect("the OS has room for one more thread");
 
     settings::bind(&window, &app, vr.sender());
     updates::bind(&window, &app, &dir, &config);

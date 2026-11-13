@@ -118,7 +118,7 @@ fn readings_reach_osc_and_time_out() {
     assert!(
         views
             .iter()
-            .any(|v| v.connected && v.bpm == 100 && v.percent == 0.5)
+            .any(|v| v.connected && v.bpm == 100 && (v.percent - 0.5).abs() < f32::EPSILON)
     );
     assert!(!views.last().unwrap().connected);
     assert!(views.iter().all(|v| v.bpm != 55));
@@ -265,7 +265,7 @@ fn only_source_settings_restart_the_source() {
     engine.send(status(2, "new source"));
     let views = engine.finish();
     assert!(
-        views.iter().any(|v| v.percent == 1.0),
+        views.iter().any(|v| (v.percent - 1.0).abs() < f32::EPSILON),
         "max_heart_rate applied"
     );
     assert!(views.iter().any(|v| v.status == "same source"));
