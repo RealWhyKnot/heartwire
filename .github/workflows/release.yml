@@ -201,6 +201,14 @@ jobs:
             dist/*-setup.exe
             dist/*.tar.gz
           manifest: 'false'
+          sidecar: 'true'
+
+      - name: Hash integrity manifests
+        uses: RealWhyKnot/workflows/checksums@v1
+        with:
+          archives: dist/*.integrity.tsv
+          manifest: 'false'
+          sidecar: 'true'
 
       - name: Build release notes
         id: notes
@@ -233,3 +241,4 @@ jobs:
             dist/*-setup.exe
             dist/*.tar.gz
             dist/*.integrity.tsv
+            dist/*.sha256
