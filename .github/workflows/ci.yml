@@ -43,9 +43,12 @@ jobs:
           set -euo pipefail
           shopt -s inherit_errexit
           sudo apt-get update
-          sudo apt-get install -y shellcheck shfmt pkg-config libudev-dev libdbus-1-dev \
+          sudo apt-get install -y pkg-config libudev-dev libdbus-1-dev \
             libssl-dev libfontconfig1-dev libxkbcommon-dev
           python -m pip install -r requirements-dev.txt
+
+      - name: Set up shell tools
+        uses: RealWhyKnot/workflows/setup-shell-tools@v1
 
       - name: Set up PSScriptAnalyzer
         uses: RealWhyKnot/workflows/setup-pssa@v1
