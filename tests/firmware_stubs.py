@@ -30,6 +30,7 @@ class Pin:
     OUT: ClassVar[int] = 1
 
     def __init__(self, name: str, mode: int) -> None:
+        super().__init__()
         self.name = name
         self.mode = mode
         self.values: list[int] = []

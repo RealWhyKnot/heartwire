@@ -10,5 +10,8 @@
   "reportImportCycles": "error",
   "reportPropertyTypeMismatch": "error",
   "reportUnnecessaryTypeIgnoreComment": "error",
-  "reportUnreachable": "error"
+  "reportUnreachable": "error",
+  "reportMissingSuperCall": "error",
+  "reportUninitializedInstanceVariable": "error",
+  "reportUnusedCallResult": "error"
 }

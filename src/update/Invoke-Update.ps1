@@ -20,7 +20,7 @@ function Copy-UpdateFile {
     $attempt = 0
     while ($true) {
         try {
-            Copy-Item -Path (Join-Path -Path $Source -ChildPath '*') -Destination $Destination -Recurse -Force
+            Get-ChildItem -LiteralPath $Source -Force | Copy-Item -Destination $Destination -Recurse -Force
             return
         } catch [System.IO.IOException], [System.UnauthorizedAccessException],
         [System.Management.Automation.RuntimeException], [System.ArgumentException] {

@@ -1,0 +1,12 @@
+[files]
+extend-exclude = [
+  "*.lock",
+  "package-lock.json",
+  "packages.lock.json",
+  "pnpm-lock.yaml",
+  "vendor/",
+  "third_party/",
+  "node_modules/",
+  ".yarn/",
+  "/crates/heartwire-ui/",
+]

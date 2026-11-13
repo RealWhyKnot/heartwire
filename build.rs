@@ -23,7 +23,8 @@ fn main() -> std::io::Result<()> {
         }
         res.set("ProductName", "Heartwire");
         res.set("FileDescription", "Heartwire");
-        res.compile().expect("windows resources compile");
+        res.compile()
+            .expect("the Windows SDK resource compiler is installed");
     }
     Ok(())
 }

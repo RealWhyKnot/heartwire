@@ -100,7 +100,7 @@ mod tests {
     #[test]
     fn the_partial_line_before_the_first_newline_is_dropped() {
         assert_eq!(
-            lines(&[b"nd, rescanning\r\n# no strap found\r\n72\r\n"]),
+            lines(&[b"ound, rescanning\r\n# no strap found\r\n72\r\n"]),
             [b"# no strap found\r".to_vec(), b"72\r".to_vec()]
         );
     }

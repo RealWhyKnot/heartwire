@@ -221,7 +221,7 @@ mod tests {
     fn readings_after_a_note_bring_the_status_back() {
         let observed = run(
             [
-                Output::Bytes(b"nd, rescanning\r\n# found COOSPO HW807\r\n# subscribed\r\n"),
+                Output::Bytes(b"ound, rescanning\r\n# found COOSPO HW807\r\n# subscribed\r\n"),
                 Output::Bytes(b"# no skin contact\r\n"),
                 Output::Bytes(b"72\r\n73\r\n"),
             ],

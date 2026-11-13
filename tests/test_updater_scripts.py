@@ -11,7 +11,7 @@ class UpdaterSyntaxTests(unittest.TestCase):
         shells = ("pwsh", "powershell.exe") if os.name == "nt" else ("pwsh",)
         for shell in shells:
             with self.subTest(shell=shell):
-                subprocess.run([shell, "-NoProfile", "-File", str(script)], check=True, timeout=30)
+                _ = subprocess.run([shell, "-NoProfile", "-File", str(script)], check=True, timeout=30)
 
     def test_bash_parser_and_shellcheck(self) -> None:
         root = Path(__file__).resolve().parents[1]
@@ -31,4 +31,4 @@ class UpdaterSyntaxTests(unittest.TestCase):
             ["shellcheck", "src/update/apply.sh"],
         ]:
             with self.subTest(command=command[0]):
-                subprocess.run([*prefix, *command], cwd=root, check=True, timeout=30)
+                _ = subprocess.run([*prefix, *command], cwd=root, check=True, timeout=30)

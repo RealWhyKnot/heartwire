@@ -1,0 +1,7 @@
+[project]
+name = "heartwire-checks"
+version = "0.0.0"
+requires-python = ">=3.12"
+
+[dependency-groups]
+dev = ["pyright==1.1.414", "ruff==0.17.5"]
