@@ -3,7 +3,7 @@ all-features = true
 
 [advisories]
 yanked = "deny"
-unmaintained = "all"
+unmaintained = "workspace"
 unsound = "all"
 
 [licenses]
@@ -36,3 +36,47 @@ allow-wildcard-paths = true
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"
+
+[[licenses.exceptions]]
+crate = "i-slint-backend-selector"
+allow = ["GPL-3.0-only"]
+
+[[licenses.exceptions]]
+crate = "i-slint-backend-winit"
+allow = ["GPL-3.0-only"]
+
+[[licenses.exceptions]]
+crate = "i-slint-common"
+allow = ["GPL-3.0-only"]
+
+[[licenses.exceptions]]
+crate = "i-slint-compiler"
+allow = ["GPL-3.0-only"]
+
+[[licenses.exceptions]]
+crate = "i-slint-core"
+allow = ["GPL-3.0-only"]
+
+[[licenses.exceptions]]
+crate = "i-slint-core-macros"
+allow = ["GPL-3.0-only"]
+
+[[licenses.exceptions]]
+crate = "i-slint-renderer-skia"
+allow = ["GPL-3.0-only"]
+
+[[licenses.exceptions]]
+crate = "i-slint-renderer-software"
+allow = ["GPL-3.0-only"]
+
+[[licenses.exceptions]]
+crate = "slint"
+allow = ["GPL-3.0-only"]
+
+[[licenses.exceptions]]
+crate = "slint-build"
+allow = ["GPL-3.0-only"]
+
+[[licenses.exceptions]]
+crate = "slint-macros"
+allow = ["GPL-3.0-only"]
