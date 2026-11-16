@@ -1,9 +1,7 @@
 use std::path::PathBuf;
 
 fn home() -> PathBuf {
-    std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_default()
+    std::env::var_os("HOME").map_or_else(PathBuf::new, PathBuf::from)
 }
 
 #[cfg(target_os = "macos")]
@@ -14,8 +12,7 @@ fn entry() -> PathBuf {
 #[cfg(not(target_os = "macos"))]
 fn entry() -> PathBuf {
     std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| home().join(".config"))
+        .map_or_else(|| home().join(".config"), PathBuf::from)
         .join("autostart/heartwire.desktop")
 }
 

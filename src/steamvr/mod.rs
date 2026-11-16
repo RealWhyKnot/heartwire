@@ -65,14 +65,14 @@ impl Sender {
         #[cfg(windows)]
         let _ = self.inner.send(Msg::Enable(enabled));
         #[cfg(not(windows))]
-        let _ = enabled;
+        let _ = (self, enabled);
     }
 
     pub(crate) fn view(&self, view: PanelView) {
         #[cfg(windows)]
         let _ = self.inner.send(Msg::View(view));
         #[cfg(not(windows))]
-        drop(view);
+        let _ = (self, view);
     }
 }
 
