@@ -7,7 +7,7 @@ from pathlib import Path
 
 def _git_bash() -> str | None:
     git = shutil.which("git")
-    if os.name != "nt" or git is None or shutil.which("shellcheck") is None:
+    if git is None or shutil.which("shellcheck") is None:
         return None
     for parent in Path(git).resolve().parents:
         candidate = parent / "bin" / "bash.exe"
@@ -27,7 +27,7 @@ class UpdaterSyntaxTests(unittest.TestCase):
 
     def test_bash_parser_and_shellcheck(self) -> None:
         root = Path(__file__).resolve().parents[1]
-        git_bash = _git_bash()
+        git_bash = _git_bash() if os.name == "nt" else None
         prefix: list[str] = (
             ["wsl", "--distribution", os.environ["LINT_WSL_DISTRO"], "--cd", str(root), "--"]
             if os.name == "nt" and git_bash is None
