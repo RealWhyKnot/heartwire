@@ -1,3 +1,4 @@
 /target
 /dist
 version.txt
+__pycache__/

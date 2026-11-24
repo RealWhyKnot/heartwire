@@ -37,4 +37,6 @@ SOFTWARE.
 ## Slint
 
 The interface uses Slint (https://slint.dev) under the GNU General Public
-License v3.0 only, so the built app is distributed under GPL-3.0.
+License v3.0 only. Heartwire's own source is GPL-3.0-or-later, but the built app
+includes Slint, so a built copy can only be distributed under GPL-3.0 (version 3
+exactly).

@@ -1,6 +1,14 @@
 # Contributing
 
-You need a stable Rust toolchain. On Linux, install
+I built Heartwire for my own use first and I maintain it alone. I'm picky about how the code is structured, how it's styled and how features fit together. If you hit a bug or want a change, please open an [issue](https://github.com/RealWhyKnot/heartwire/issues/new/choose) instead of sending a surprise pull request. A description of the problem, the steps to reproduce it or what you're trying to do is more useful to me than an unannounced PR.
+
+If you'd like to help maintain Heartwire over time, especially if I'm committing to it less often, or you have a substantial change you want to build, open an issue or reach out first. I'm happy to talk through the approach and agree on code style and commit conventions before you write any code.
+
+## If we agree on a PR
+
+Link the issue where we settled the approach in the PR description.
+
+You need Rust 1.100 (`rust-toolchain.toml` selects it). On Linux, install
 `pkg-config libudev-dev libdbus-1-dev libssl-dev libfontconfig1-dev libxkbcommon-dev` first.
 
 Turn on the repository's hooks after cloning:
@@ -35,7 +43,7 @@ there as a PNG.
 
 ## Checks
 
-CI runs these on Windows, macOS and Linux. Run them before opening a pull request:
+CI runs these on Windows, macOS and Linux. Run them before sending anything:
 
 ```bash
 cargo fmt --check
@@ -78,7 +86,7 @@ over. Run it on a release build. Debug numbers are several times slower.
 Conventional subjects: `type(scope): description`. Keep them to one line unless
 the change needs context the subject can't hold.
 
-## Releases
+## Releases (maintainer notes)
 
 Tag `vYYYY.M.D.N` and push the tag. The release workflow checks the tag is the
 next one for its day, runs the tests, builds every platform and publishes the

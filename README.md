@@ -13,7 +13,7 @@
 <p align="center">
   <a href="https://github.com/RealWhyKnot/heartwire/releases/latest">Download</a> ·
   <a href="https://github.com/RealWhyKnot/heartwire/issues/new?template=bug_report.yml">Report a bug</a> ·
-  <a href="https://github.com/RealWhyKnot/heartwire/releases">Changelog</a> ·
+  <a href="https://github.com/RealWhyKnot/heartwire/releases">Releases</a> ·
   <a href=".github/SECURITY.md">Security</a>
 </p>
 
@@ -76,7 +76,7 @@ You can rename both under Settings > Parameters. OSC goes to `127.0.0.1:9000` by
 
 ## SteamVR and start-up
 
-Both options are under Settings > General. "Start with SteamVR" (Windows) launches Heartwire with SteamVR and adds a heart icon to the dashboard that shows your heart rate and its source. A copy SteamVR started closes with it. "Start at login" opens the app minimized when you sign in.
+Both options are under Settings > General. "Start with SteamVR" (Windows) launches Heartwire with SteamVR and adds a heart icon to the dashboard that shows your heart rate and its source. If SteamVR started Heartwire, Heartwire closes when SteamVR closes. A copy you opened yourself keeps running. "Start at login" opens the app minimized when you sign in.
 
 ## Building
 
@@ -84,8 +84,18 @@ Both options are under Settings > General. "Start with SteamVR" (Windows) launch
 cargo build --release
 ```
 
-[CONTRIBUTING.md](CONTRIBUTING.md) lists the Linux packages you need, the checks CI runs and how releases are tagged.
+You need Rust 1.100 (`rust-toolchain.toml` selects it if you use rustup).
+
+- **Windows:** the Visual Studio C++ build tools and the Windows SDK. The build uses the SDK's resource compiler to embed the icon and version. Building the setup exe also needs [NSIS](https://nsis.sourceforge.io) 3.
+- **Linux:** `pkg-config libudev-dev libdbus-1-dev libssl-dev libfontconfig1-dev libxkbcommon-dev`.
+- **macOS:** Xcode command line tools.
+
+[CONTRIBUTING.md](CONTRIBUTING.md) lists the checks CI runs and how the code is laid out.
+
+## Bug reports and changes
+
+Open an [issue](https://github.com/RealWhyKnot/heartwire/issues/new/choose) for bugs and ideas. Please don't send a pull request without talking to me first. [CONTRIBUTING.md](CONTRIBUTING.md) explains why.
 
 ## License
 
-GPL-3.0-or-later. The font and icon licences are in [NOTICE.md](NOTICE.md).
+Heartwire's own code is GPL-3.0-or-later, see [LICENSE](LICENSE). It uses Slint under GPL-3.0, so a built copy of the app is distributed under GPL-3.0. The font and icon licences are in [NOTICE.md](NOTICE.md).
