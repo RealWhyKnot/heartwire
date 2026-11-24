@@ -12,7 +12,7 @@
 
 <p align="center">
   <a href="https://github.com/RealWhyKnot/heartwire/releases/latest">Download</a> ·
-  <a href="https://github.com/RealWhyKnot/heartwire/issues/new?template=bug_report.yml">Report a bug</a> ·
+  <a href="https://github.com/RealWhyKnot/heartwire/issues/new">Report a bug</a> ·
   <a href="https://github.com/RealWhyKnot/heartwire/releases">Releases</a> ·
   <a href=".github/SECURITY.md">Security</a>
 </p>
@@ -94,7 +94,7 @@ You need Rust 1.100 (`rust-toolchain.toml` selects it if you use rustup).
 
 ## Bug reports and changes
 
-Open an [issue](https://github.com/RealWhyKnot/heartwire/issues/new/choose) for bugs and ideas. Please don't send a pull request without talking to me first. [CONTRIBUTING.md](CONTRIBUTING.md) explains why.
+Open an [issue](https://github.com/RealWhyKnot/heartwire/issues/new) for bugs and ideas. Please don't send a pull request without talking to me first. [CONTRIBUTING.md](CONTRIBUTING.md) explains why.
 
 ## License
 
