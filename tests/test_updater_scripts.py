@@ -1,7 +1,19 @@
 import os
+import shutil
 import subprocess
 import unittest
 from pathlib import Path
+
+
+def _git_bash() -> str | None:
+    git = shutil.which("git")
+    if os.name != "nt" or git is None or shutil.which("shellcheck") is None:
+        return None
+    for parent in Path(git).resolve().parents:
+        candidate = parent / "bin" / "bash.exe"
+        if candidate.is_file():
+            return str(candidate)
+    return None
 
 
 class UpdaterSyntaxTests(unittest.TestCase):
@@ -15,9 +27,13 @@ class UpdaterSyntaxTests(unittest.TestCase):
 
     def test_bash_parser_and_shellcheck(self) -> None:
         root = Path(__file__).resolve().parents[1]
+        git_bash = _git_bash()
         prefix: list[str] = (
-            ["wsl", "--distribution", os.environ["LINT_WSL_DISTRO"], "--cd", str(root), "--"] if os.name == "nt" else []
+            ["wsl", "--distribution", os.environ["LINT_WSL_DISTRO"], "--cd", str(root), "--"]
+            if os.name == "nt" and git_bash is None
+            else []
         )
+        bash = git_bash or "bash"
         arguments = [
             "42",
             "/opt/it's here/update.tar.gz",
@@ -27,7 +43,7 @@ class UpdaterSyntaxTests(unittest.TestCase):
             "/opt/it's here/update.log",
         ]
         for command in [
-            ["bash", "-n", "src/update/apply.sh", *arguments],
+            [bash, "-n", "src/update/apply.sh", *arguments],
             ["shellcheck", "src/update/apply.sh"],
         ]:
             with self.subTest(command=command[0]):
